@@ -1,4 +1,4 @@
-import { type Criterion, type JudgeSlot, type Score } from "./model";
+import { CRITERIA, type Criterion, type JudgeSlot, type Score } from "./model";
 
 /** Sum of every 1–5 value recorded for a deelnemer across both judges. Higher = better. */
 export function rawTotalFor(standNr: string, scoresA: Score[], scoresB: Score[]): number {
@@ -111,4 +111,57 @@ export function ranksWithinSet(criterionScores: Score[], allowed: string[]): Map
   const ranks = new Map<string, number>();
   placed.forEach((s, i) => ranks.set(s.standNr, i + 1));
   return ranks;
+}
+
+export interface FinalRow {
+  standNr: string;
+  mergedByCriterion: Record<Criterion, number>;
+  overall: number;
+  rawTotal: number;
+}
+export interface FinalRanking {
+  ranked: FinalRow[];
+  incomplete: string[];
+}
+
+function forCriterion(scores: Score[], criterion: Criterion): Score[] {
+  return scores.filter((s) => s.criterion === criterion);
+}
+export function computeFinalRanking(scoresA: Score[], scoresB: Score[]): FinalRanking {
+  const common = commonStandNrs(scoresA, scoresB);
+  const standsA = new Set(scoresA.map((s) => s.standNr));
+  const standsB = new Set(scoresB.map((s) => s.standNr));
+  const incomplete = [...new Set([...standsA, ...standsB])]
+    .filter((s) => !(standsA.has(s) && standsB.has(s)))
+    .sort((x, y) => x.localeCompare(y));
+  const mergedMaps = {} as Record<Criterion, Map<string, number>>;
+  for (const c of CRITERIA) {
+    const ranksA = ranksWithinSet(forCriterion(scoresA, c), common);
+    const ranksB = ranksWithinSet(forCriterion(scoresB, c), common);
+    const merged = new Map<string, number>();
+    for (const standNr of common) {
+      merged.set(standNr, ((ranksA.get(standNr) ?? 0) + (ranksB.get(standNr) ?? 0)) / 2);
+    }
+    mergedMaps[c] = merged;
+  }
+  const rows: FinalRow[] = common.map((standNr) => {
+    const mergedByCriterion = {} as Record<Criterion, number>;
+    let overall = 0;
+    for (const c of CRITERIA) {
+      const value = mergedMaps[c].get(standNr) ?? 0;
+      mergedByCriterion[c] = value;
+      overall += value;
+    }
+    return {
+      standNr,
+      mergedByCriterion,
+      overall,
+      rawTotal: rawTotalFor(standNr, scoresA, scoresB),
+    };
+  });
+  rows.sort(
+    (x, y) =>
+      x.overall - y.overall || y.rawTotal - x.rawTotal || x.standNr.localeCompare(y.standNr),
+  );
+  return { ranked: rows, incomplete };
 }

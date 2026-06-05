@@ -4,6 +4,7 @@ import { rawTotalFor } from "./fairness";
 import { detectAllDrift, detectDriftForCriterion } from "./fairness";
 import { computeDriftSeverity, driftList } from "./fairness";
 import { commonStandNrs, ranksWithinSet } from "./fairness";
+import { computeFinalRanking } from "./fairness";
 
 function scores(
   judge: JudgeSlot,
@@ -144,6 +145,38 @@ describe("ranksWithinSet", () => {
     expect(ranks.get("x")).toBe(1);
     expect(ranks.get("z")).toBe(2);
     expect(ranks.has("y")).toBe(false);
+  });
+});
+
+describe("computeFinalRanking", () => {
+  it("merges per-criterion ranks across judges; lower overall = better; lists incompletes", () => {
+    const a = scores("A", [
+      { s: "s1", v: v(5, 5, 5, 5), r: r(1, 1, 1, 1) },
+      { s: "s2", v: v(4, 4, 4, 4), r: r(2, 2, 2, 2) },
+      { s: "s3", v: v(1, 1, 1, 1), r: r(3, 3, 3, 3) },
+    ]);
+    const b = scores("B", [
+      { s: "s1", v: v(5, 5, 5, 5), r: r(1, 1, 1, 1) },
+      { s: "s2", v: v(3, 3, 3, 3), r: r(2, 2, 2, 2) },
+    ]);
+    const { ranked, incomplete } = computeFinalRanking(a, b);
+    expect(incomplete).toEqual(["s3"]);
+    expect(ranked.map((row) => row.standNr)).toEqual(["s1", "s2"]);
+    expect(ranked[0].overall).toBe(4);
+    expect(ranked[1].overall).toBe(8);
+  });
+  it("breaks overall ties on higher raw total", () => {
+    const a = scores("A", [
+      { s: "hi", v: v(5, 5, 5, 5), r: r(1, 1, 2, 2) },
+      { s: "lo", v: v(2, 2, 2, 2), r: r(2, 2, 1, 1) },
+    ]);
+    const b = scores("B", [
+      { s: "hi", v: v(5, 5, 5, 5), r: r(1, 1, 2, 2) },
+      { s: "lo", v: v(2, 2, 2, 2), r: r(2, 2, 1, 1) },
+    ]);
+    const { ranked } = computeFinalRanking(a, b);
+    expect(ranked[0].overall).toBe(ranked[1].overall);
+    expect(ranked[0].standNr).toBe("hi");
   });
 });
 
