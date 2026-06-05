@@ -32,3 +32,49 @@ describe("sync-api: events", () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe("sync-api: changes", () => {
+  const setup = async () => {
+    const store = new InMemoryStore();
+    const app = createApp(store, gen);
+    await app.request("/events", json({ name: "W", date: "2026-06-05" }));
+    return app;
+  };
+  const change = {
+    deelnemers: [],
+    captureMeta: [],
+    scores: [
+      {
+        eventId: "e1",
+        judge: "A",
+        standNr: "7",
+        criterion: "impact",
+        value: 4,
+        rankPos: 1,
+        updatedAt: 10,
+      },
+    ],
+  };
+
+  it("rejects changes without the matching event code", async () => {
+    const app = await setup();
+    const res = await app.request("/events/e1/changes", json(change)); // no x-event-code
+    expect(res.status).toBe(403);
+  });
+
+  it("accepts pushed changes and serves them on pull", async () => {
+    const app = await setup();
+    const push = {
+      ...json(change),
+      headers: {
+        "content-type": "application/json",
+        "x-event-code": "ABC123",
+      },
+    };
+    expect((await app.request("/events/e1/changes", push)).status).toBe(200);
+    const res = await app.request("/events/e1/changes?since=0", {
+      headers: { "x-event-code": "ABC123" },
+    });
+    expect((await res.json()).scores).toHaveLength(1);
+  });
+});
