@@ -15,7 +15,9 @@
     "skipDefaultLibCheck": true,
     "paths": {
       "@winnovation/domain": ["./libs/domain/src/index.ts"],
-      "@winnovation/data-access": ["./libs/data-access/src/index.ts"]
+      "@winnovation/data-access": ["./libs/data-access/src/index.ts"],
+      "@winnovation/ui": ["./libs/ui/src/index.ts"],
+      "@winnovation/feature-jury": ["./libs/feature-jury/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]
