@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { CRITERIA, type Criterion, type JudgeSlot, type Score, type ScoreValue } from "./model";
 import { rawTotalFor } from "./fairness";
 import { detectAllDrift, detectDriftForCriterion } from "./fairness";
+import { computeDriftSeverity, driftList } from "./fairness";
 
 function scores(
   judge: JudgeSlot,
@@ -79,6 +80,42 @@ describe("detectAllDrift", () => {
     expect(detectAllDrift([...aImpact, ...bImpact])).toEqual([
       { judge: "A", criterion: "impact", betterRanked: "x", worseRanked: "y" },
     ]);
+  });
+});
+
+describe("computeDriftSeverity / driftList", () => {
+  const mk = (standNr: string, value: number, rankPos: number | null): Score => ({
+    judge: "A",
+    standNr,
+    criterion: "impact",
+    value: value as Score["value"],
+    rankPos,
+  });
+  it("marks both sides of a single mild inversion with severity 1", () => {
+    const scores = [mk("x", 3, 1), mk("y", 4, 2)];
+    const map = computeDriftSeverity(scores);
+    expect(map["x"]?.impact).toBe(1);
+    expect(map["y"]?.impact).toBe(1);
+    const list = driftList(scores);
+    expect(list).toHaveLength(2);
+    expect(list.every((item) => item.severity === 1)).toBe(true);
+  });
+  it("marks a triple inversion as strong (severity 2) and sorts strongest first", () => {
+    const scores = [mk("a", 1, 1), mk("b", 2, 2), mk("c", 3, 3), mk("d", 4, 4)];
+    const map = computeDriftSeverity(scores);
+    expect(map["a"]?.impact).toBe(2);
+    const list = driftList(scores);
+    expect(list[0].severity).toBe(2);
+  });
+  it("returns empty for a monotonic ordering", () => {
+    const scores = [mk("x", 5, 1), mk("y", 4, 2), mk("z", 3, 3)];
+    expect(computeDriftSeverity(scores)).toEqual({});
+    expect(driftList(scores)).toEqual([]);
+  });
+  it("ignores unplaced scores (rankPos null)", () => {
+    const scores = [mk("x", 5, 1), mk("y", 4, 2), mk("z", 3, 3), mk("q", 1, null)];
+    expect(computeDriftSeverity(scores)).toEqual({});
+    expect(driftList(scores)).toEqual([]);
   });
 });
 

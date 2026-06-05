@@ -43,3 +43,52 @@ export function detectAllDrift(scores: Score[]): DriftFlag[] {
   }
   return [...groups.values()].flatMap(detectDriftForCriterion);
 }
+
+export type DriftSeverity = 1 | 2; // 1 = mild, 2 = strong
+export interface DriftListItem {
+  standNr: string;
+  criterion: Criterion;
+  severity: DriftSeverity;
+}
+export type DriftSeverityMap = Record<string, Partial<Record<Criterion, DriftSeverity>>>;
+
+/** Per-standNr × criterion drift severity for ONE judge's scores (all-pairs inversions). */
+export function computeDriftSeverity(scores: Score[]): DriftSeverityMap {
+  const byCriterion = new Map<Criterion, Score[]>();
+  for (const s of scores) {
+    const group = byCriterion.get(s.criterion);
+    if (group) group.push(s);
+    else byCriterion.set(s.criterion, [s]);
+  }
+  const map: DriftSeverityMap = {};
+  for (const [criterion, group] of byCriterion) {
+    const placed = group
+      .filter((s): s is Score & { rankPos: number } => s.rankPos !== null)
+      .sort((a, b) => a.rankPos - b.rankPos);
+    placed.forEach((current, i) => {
+      let inv = 0;
+      placed.forEach((other, j) => {
+        if (i < j && current.value < other.value) inv++;
+        else if (i > j && current.value > other.value) inv++;
+      });
+      if (inv > 0) {
+        const severity: DriftSeverity = inv >= 3 ? 2 : 1;
+        (map[current.standNr] ??= {})[criterion] = severity;
+      }
+    });
+  }
+  return map;
+}
+
+/** Flattened drift entries, strongest-first (severity desc). */
+export function driftList(scores: Score[]): DriftListItem[] {
+  const map = computeDriftSeverity(scores);
+  const items: DriftListItem[] = [];
+  for (const standNr of Object.keys(map)) {
+    for (const criterion of Object.keys(map[standNr]) as Criterion[]) {
+      const severity = map[standNr][criterion];
+      if (severity !== undefined) items.push({ standNr, criterion, severity });
+    }
+  }
+  return items.sort((a, b) => b.severity - a.severity);
+}
