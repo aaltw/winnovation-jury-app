@@ -92,3 +92,23 @@ export function driftList(scores: Score[]): DriftListItem[] {
   }
   return items.sort((a, b) => b.severity - a.severity);
 }
+
+/** standNrs that appear in BOTH judges' scores, sorted ascending. */
+export function commonStandNrs(scoresA: Score[], scoresB: Score[]): string[] {
+  const setB = new Set(scoresB.map((s) => s.standNr));
+  const inBoth = new Set<string>();
+  for (const s of scoresA) if (setB.has(s.standNr)) inBoth.add(s.standNr);
+  return [...inBoth].sort((x, y) => x.localeCompare(y));
+}
+/** Restrict one judge's ONE-criterion scores to `allowed`, recompute dense ranks 1..N (1 = best). */
+export function ranksWithinSet(criterionScores: Score[], allowed: string[]): Map<string, number> {
+  const allowedSet = new Set(allowed);
+  const placed = criterionScores
+    .filter(
+      (s): s is Score & { rankPos: number } => s.rankPos !== null && allowedSet.has(s.standNr),
+    )
+    .sort((a, b) => a.rankPos - b.rankPos);
+  const ranks = new Map<string, number>();
+  placed.forEach((s, i) => ranks.set(s.standNr, i + 1));
+  return ranks;
+}

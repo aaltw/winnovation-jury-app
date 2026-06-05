@@ -3,6 +3,7 @@ import { CRITERIA, type Criterion, type JudgeSlot, type Score, type ScoreValue }
 import { rawTotalFor } from "./fairness";
 import { detectAllDrift, detectDriftForCriterion } from "./fairness";
 import { computeDriftSeverity, driftList } from "./fairness";
+import { commonStandNrs, ranksWithinSet } from "./fairness";
 
 function scores(
   judge: JudgeSlot,
@@ -116,6 +117,33 @@ describe("computeDriftSeverity / driftList", () => {
     const scores = [mk("x", 5, 1), mk("y", 4, 2), mk("z", 3, 3), mk("q", 1, null)];
     expect(computeDriftSeverity(scores)).toEqual({});
     expect(driftList(scores)).toEqual([]);
+  });
+});
+
+describe("commonStandNrs", () => {
+  it("returns standNrs scored by both judges, sorted", () => {
+    const a = scores("A", [
+      { s: "2", v: v(3, 3, 3, 3), r: r(1, 1, 1, 1) },
+      { s: "1", v: v(4, 4, 4, 4), r: r(2, 2, 2, 2) },
+    ]);
+    const b = scores("B", [
+      { s: "1", v: v(5, 5, 5, 5), r: r(1, 1, 1, 1) },
+      { s: "3", v: v(2, 2, 2, 2), r: r(2, 2, 2, 2) },
+    ]);
+    expect(commonStandNrs(a, b)).toEqual(["1"]);
+  });
+});
+describe("ranksWithinSet", () => {
+  it("recomputes 1..N ranks over the allowed set, preserving order, 1 = best", () => {
+    const slice: Score[] = [
+      { judge: "A", standNr: "x", criterion: "impact", value: 5, rankPos: 1 },
+      { judge: "A", standNr: "y", criterion: "impact", value: 4, rankPos: 2 },
+      { judge: "A", standNr: "z", criterion: "impact", value: 3, rankPos: 3 },
+    ];
+    const ranks = ranksWithinSet(slice, ["x", "z"]);
+    expect(ranks.get("x")).toBe(1);
+    expect(ranks.get("z")).toBe(2);
+    expect(ranks.has("y")).toBe(false);
   });
 });
 
