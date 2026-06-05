@@ -1,96 +1,137 @@
-# JuryWorkspaceTmp
+# Winnovation Jury
 
-<a alt="Nx logo" href="https://nx.dev" target="_blank" rel="noreferrer"><img src="https://raw.githubusercontent.com/nrwl/nx/master/images/nx-logo.png" width="45"></a>
+An offline-first **PWA** for jurying innovative student/maker projects at an event.
+Two jurors (A and B) each score every project at its stand, rank them against the
+projects they've already seen, and then **reconcile** their views into one fair final
+ranking. The interface is in Dutch.
 
-✨ Your new, shiny [Nx workspace](https://nx.dev) is ready ✨.
+The app is built with **Angular 21** (standalone components + signals) in an **Nx**
+monorepo, stores everything **locally in the browser** (IndexedDB via Dexie), and is
+installable as a Progressive Web App.
 
-[Learn more about this workspace setup and its capabilities](https://nx.dev/getting-started/intro#learn-nx?utm_source=nx_project&amp;utm_medium=readme&amp;utm_campaign=nx_projects) or run `npx nx graph` to visually explore what was created. Now, let's get you up to speed!
+---
 
-## Run tasks
+## Quick start
 
-To run tasks with Nx use:
-
-```sh
-npx nx <target> <project-name>
-```
-
-For example:
-
-```sh
-npx nx build myproject
-```
-
-These targets are either [inferred automatically](https://nx.dev/concepts/inferred-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) or defined in the `project.json` or `package.json` files.
-
-[More about running tasks in the docs &raquo;](https://nx.dev/features/run-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-## Add new projects
-
-While you could add new projects to your workspace manually, you might want to leverage [Nx plugins](https://nx.dev/concepts/nx-plugins?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) and their [code generation](https://nx.dev/features/generate-code?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) feature.
-
-To install a new plugin you can use the `nx add` command. Here's an example of adding the React plugin:
-```sh
-npx nx add @nx/react
-```
-
-Use the plugin's generator to create new projects. For example, to create a new React app or library:
+> Prerequisites: **Node 20+** (developed on 24) and **pnpm** (`corepack enable` or
+> `npm i -g pnpm`).
 
 ```sh
-# Generate an app
-npx nx g @nx/react:app demo
-
-# Generate a library
-npx nx g @nx/react:lib some-lib
+pnpm install
+pnpm nx serve jury-app           # http://localhost:4300
+# expose to other devices on your network:
+pnpm nx serve jury-app --host 0.0.0.0 --port 4300
 ```
 
-You can use `npx nx list` to get a list of installed plugins. Then, run `npx nx list <plugin-name>` to learn about more specific capabilities of a particular plugin. Alternatively, [install Nx Console](https://nx.dev/getting-started/editor-setup?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) to browse plugins and generators in your IDE.
+Open the app, enter the event code **`WIN-26`**, pick **Jurylid A** or **B**, and press
+**Start**.
 
-[Learn more about Nx plugins &raquo;](https://nx.dev/concepts/nx-plugins?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) | [Browse the plugin registry &raquo;](https://nx.dev/plugin-registry?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+### Demo data (the `WIN-26` event)
 
-## Set up CI!
+In **dev mode only**, the app automatically seeds a demo event with code **`WIN-26`** the
+first time it loads: 6 projects, both jurors fully scored and ranked, notes, plus an
+intentional "drift" flag and A↔B disagreement so every screen (home, compare, review,
+reconcile, result) has real content to explore. This is wired in
+`apps/jury-app/src/app/app.config.ts` via `provideAppInitializer` and **never runs in a
+production build**.
 
-### Step 1
+To start from a clean slate, clear the site's storage (DevTools → Application → Storage →
+*Clear site data*, or delete the `winnovation-jury` IndexedDB database) and reload.
 
-To connect to Nx Cloud, run the following command:
+---
+
+## Project layout
+
+```
+apps/
+  jury-app/        # the Angular PWA (this is what you deploy)
+  sync-api/        # optional backend for cross-device sync — see "Status" below
+libs/
+  domain/          # pure domain model + fairness/placement/reconcile logic
+  data-access/     # Dexie IndexedDB layer, repositories, JuryService, demo seeder
+  ui/              # presentational components + design tokens
+  feature-jury/    # the seven screens + signal store + routing
+```
+
+## Common commands
 
 ```sh
-npx nx connect
+pnpm nx serve jury-app                 # dev server
+pnpm nx build jury-app                 # production build  → dist/apps/jury-app/browser
+pnpm nx run-many -t test               # all unit tests (vitest)
+pnpm nx test data-access               # one project's tests
+pnpm biome check .                     # lint / format check
 ```
 
-Connecting to Nx Cloud ensures a [fast and scalable CI](https://nx.dev/ci/intro/why-nx-cloud?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) pipeline. It includes features such as:
+---
 
-- [Remote caching](https://nx.dev/ci/features/remote-cache?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Task distribution across multiple machines](https://nx.dev/ci/features/distribute-task-execution?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Automated e2e test splitting](https://nx.dev/ci/features/split-e2e-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Task flakiness detection and rerunning](https://nx.dev/ci/features/flaky-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+## Deploy
 
-### Step 2
-
-Use the following command to configure a CI workflow for your workspace:
+The jury app is a **static single-page PWA** — there is no server to run for it. A
+production build emits plain static files:
 
 ```sh
-npx nx g ci-workflow
+pnpm nx build jury-app
+# output: dist/apps/jury-app/browser/
 ```
 
-[Learn more about Nx on CI](https://nx.dev/ci/intro/ci-with-nx#ready-get-started-with-your-provider?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+Host that `browser/` folder on any static host. Three requirements:
 
-## Install Nx Console
+1. **SPA fallback** — rewrite all unknown routes to `/index.html` (the app uses client-side
+   routing for `/home`, `/stand`, `/compare`, …).
+2. **Serve at the domain root** — the router uses absolute paths. If you must serve from a
+   sub-path, rebuild with `--base-href=/your-subpath/`.
+3. **HTTPS** — required for the service worker / installability (all the hosts below give
+   you this automatically).
 
-Nx Console is an editor extension that enriches your developer experience. It lets you run tasks, generate code, and improves code autocompletion in your IDE. It is available for VSCode and IntelliJ.
+### Examples
 
-[Install Nx Console &raquo;](https://nx.dev/getting-started/editor-setup?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+**Netlify** — add a `netlify.toml` at the repo root, then connect the repo or run `netlify deploy --prod`:
 
-## Useful links
+```toml
+[build]
+  command = "pnpm install && pnpm nx build jury-app"
+  publish = "dist/apps/jury-app/browser"
 
-Learn more:
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+```
 
-- [Learn more about this workspace setup](https://nx.dev/getting-started/intro#learn-nx?utm_source=nx_project&amp;utm_medium=readme&amp;utm_campaign=nx_projects)
-- [Learn about Nx on CI](https://nx.dev/ci/intro/ci-with-nx?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Releasing Packages with Nx release](https://nx.dev/features/manage-releases?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [What are Nx plugins?](https://nx.dev/concepts/nx-plugins?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+**Vercel** — Framework preset *Other*; Build command `pnpm nx build jury-app`; Output
+directory `dist/apps/jury-app/browser`. Add a rewrite of `/(.*)` → `/index.html`.
 
-And join the Nx community:
-- [Discord](https://go.nx.dev/community)
-- [Follow us on X](https://twitter.com/nxdevtools) or [LinkedIn](https://www.linkedin.com/company/nrwl)
-- [Our Youtube channel](https://www.youtube.com/@nxdevtools)
-- [Our blog](https://nx.dev/blog?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+**Cloudflare Pages** — Build command `pnpm nx build jury-app`; Build output
+`dist/apps/jury-app/browser`; SPA fallback is on by default.
+
+**Azure Static Web Apps** — `app_location: "/"`, `output_location:
+"dist/apps/jury-app/browser"`, and a `staticwebapp.config.json` with a navigation fallback
+to `/index.html`.
+
+**Any host / quick local check** — serve the folder statically with a SPA fallback:
+
+```sh
+npx serve -s dist/apps/jury-app/browser -l 8080
+```
+
+---
+
+## Status & current limitations
+
+- **Front-end is complete and works offline**, fully on-device. Each juror's scores live in
+  that browser's IndexedDB.
+- **Cross-device sync is not wired up yet.** `apps/sync-api` (a small SQLite-backed
+  push/pull service, with a `Dockerfile`) and a `SyncClient` in `data-access` exist, but the
+  PWA does not call them. So two jurors on two devices won't see each other's scores
+  automatically — for the demo, each device works from its own (identical, seeded) `WIN-26`
+  data. Wiring `SyncClient` into the app is the natural next step for a real two-device jury.
+
+### Running the optional sync-api (for future work)
+
+```sh
+pnpm nx serve sync-api                 # http://localhost:8787 (PORT / DB_PATH env vars)
+# or containerised:
+docker build -f apps/sync-api/Dockerfile -t winnovation-sync-api .
+docker run -p 8787:8787 winnovation-sync-api
+```
