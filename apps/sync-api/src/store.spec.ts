@@ -1,0 +1,65 @@
+import { describe, expect, it } from "vitest";
+import { InMemoryStore, type ChangeSet } from "./store";
+
+const emptyChanges = (): ChangeSet => ({
+  deelnemers: [],
+  scores: [],
+  captureMeta: [],
+});
+
+describe("InMemoryStore", () => {
+  it("creates and finds an event by code", () => {
+    const store = new InMemoryStore();
+    store.createEvent({
+      id: "e1",
+      name: "W",
+      date: "2026-06-05",
+      eventCode: "ABC123",
+    });
+    expect(store.findEventByCode("ABC123")?.id).toBe("e1");
+    expect(store.findEventByCode("NOPE")).toBeUndefined();
+  });
+  it("applies a score change and returns it via changesSince", () => {
+    const store = new InMemoryStore();
+    const change: ChangeSet = {
+      ...emptyChanges(),
+      scores: [
+        {
+          eventId: "e1",
+          judge: "A",
+          standNr: "7",
+          criterion: "impact",
+          value: 4,
+          rankPos: 1,
+          updatedAt: 10,
+        },
+      ],
+    };
+    store.applyChanges("e1", change);
+    expect(store.changesSince("e1", 0).scores).toHaveLength(1);
+    expect(store.changesSince("e1", 10).scores).toHaveLength(0);
+  });
+  it("resolves conflicts last-write-wins by updatedAt", () => {
+    const store = new InMemoryStore();
+    const base = {
+      eventId: "e1",
+      judge: "A" as const,
+      standNr: "7",
+      criterion: "impact" as const,
+      rankPos: null,
+    };
+    store.applyChanges("e1", {
+      ...emptyChanges(),
+      scores: [{ ...base, value: 3, updatedAt: 5 }],
+    });
+    store.applyChanges("e1", {
+      ...emptyChanges(),
+      scores: [{ ...base, value: 5, updatedAt: 9 }],
+    });
+    store.applyChanges("e1", {
+      ...emptyChanges(),
+      scores: [{ ...base, value: 1, updatedAt: 2 }],
+    });
+    expect(store.changesSince("e1", 0).scores[0].value).toBe(5);
+  });
+});
