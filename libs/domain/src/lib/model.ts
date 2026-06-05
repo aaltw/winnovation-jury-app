@@ -17,6 +17,7 @@ export interface Deelnemer {
   standNr: string; // identity within an event; the join key between the two judges
   projectgroep: string;
   isVervolgproject: boolean;
+  updatedAt?: number; // epoch ms; set by the sync layer
 }
 
 export interface Score {
@@ -25,6 +26,7 @@ export interface Score {
   criterion: Criterion;
   value: ScoreValue; // 1–5, the absolute read
   rankPos: number | null; // 1 = best; null = not yet placed
+  updatedAt?: number; // epoch ms; set by the sync layer
 }
 
 export interface CaptureMeta {
@@ -34,4 +36,5 @@ export interface CaptureMeta {
   note: string;
   review: string;
   photoRef: string | null; // id into the local photos table; null when no photo
+  updatedAt?: number; // epoch ms; set by the sync layer
 }
