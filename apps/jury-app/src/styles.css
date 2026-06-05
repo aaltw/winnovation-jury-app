@@ -104,7 +104,6 @@ body {
   width: 38px;
   height: 38px;
   border-radius: var(--r-pill);
-  border: none;
   background: #fff;
   border: 1px solid var(--line-2);
   display: grid;
@@ -774,6 +773,7 @@ body {
   gap: 12px;
   margin: 22px 0 12px;
 }
+/* biome-ignore lint/style/noDescendingSpecificity: distinct component scope from .wv-toggle-row .lbl .t; source order preserved from the design system port */
 .wv-divider-label .t {
   font-size: 12px;
   font-weight: 800;
