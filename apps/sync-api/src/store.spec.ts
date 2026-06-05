@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { InMemoryStore, type ChangeSet } from "./store";
+import { type ChangeSet, InMemoryStore } from "./store";
 
 const emptyChanges = (): ChangeSet => ({
   deelnemers: [],
