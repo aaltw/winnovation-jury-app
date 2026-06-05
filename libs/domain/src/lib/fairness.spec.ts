@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CRITERIA, type Criterion, type JudgeSlot, type Score, type ScoreValue } from "./model";
 import { rawTotalFor } from "./fairness";
+import { detectAllDrift, detectDriftForCriterion } from "./fairness";
 
 function scores(
   judge: JudgeSlot,
@@ -33,6 +34,51 @@ describe("rawTotalFor", () => {
     const a = scores("A", [{ s: "1", v: v(5, 4, 3, 2), r: r(1, 1, 1, 1) }]);
     const b = scores("B", [{ s: "1", v: v(1, 1, 1, 1), r: r(1, 1, 1, 1) }]);
     expect(rawTotalFor("1", a, b)).toBe(5 + 4 + 3 + 2 + 4);
+  });
+});
+
+describe("detectDriftForCriterion", () => {
+  const mk = (standNr: string, value: number, rankPos: number): Score => ({
+    judge: "A",
+    standNr,
+    criterion: "impact",
+    value: value as Score["value"],
+    rankPos,
+  });
+  it("flags a deelnemer ranked better but scored lower than its neighbour", () => {
+    const flags = detectDriftForCriterion([mk("x", 3, 1), mk("y", 4, 2)]);
+    expect(flags).toEqual([
+      { judge: "A", criterion: "impact", betterRanked: "x", worseRanked: "y" },
+    ]);
+  });
+  it("returns no flags when values are monotonic with rank", () => {
+    expect(detectDriftForCriterion([mk("x", 5, 1), mk("y", 4, 2), mk("z", 4, 3)])).toEqual([]);
+  });
+  it("ignores unplaced deelnemers (rankPos null)", () => {
+    const unplaced: Score = {
+      judge: "A",
+      standNr: "q",
+      criterion: "impact",
+      value: 1,
+      rankPos: null,
+    };
+    expect(detectDriftForCriterion([mk("x", 5, 1), unplaced])).toEqual([]);
+  });
+});
+
+describe("detectAllDrift", () => {
+  it("groups by judge and criterion", () => {
+    const aImpact: Score[] = [
+      { judge: "A", standNr: "x", criterion: "impact", value: 3, rankPos: 1 },
+      { judge: "A", standNr: "y", criterion: "impact", value: 4, rankPos: 2 },
+    ];
+    const bImpact: Score[] = [
+      { judge: "B", standNr: "x", criterion: "impact", value: 5, rankPos: 1 },
+      { judge: "B", standNr: "y", criterion: "impact", value: 4, rankPos: 2 },
+    ];
+    expect(detectAllDrift([...aImpact, ...bImpact])).toEqual([
+      { judge: "A", criterion: "impact", betterRanked: "x", worseRanked: "y" },
+    ]);
   });
 });
 
