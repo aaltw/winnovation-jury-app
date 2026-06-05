@@ -37,6 +37,7 @@ describe("SyncClient", () => {
 
   it("pushes local scores and pulls the other judge back in", async () => {
     await saveScore(db, {
+      eventId: "e1",
       judge: "A",
       standNr: "7",
       criterion: "impact",

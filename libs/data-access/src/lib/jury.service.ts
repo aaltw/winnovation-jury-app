@@ -33,22 +33,25 @@ export class JuryService {
   saveScore(score: Score) {
     return saveScore(this.db, score);
   }
-  scoresForJudge(judge: JudgeSlot) {
-    return scoresForJudge(this.db, judge);
+  scoresForJudge(eventId: string, judge: JudgeSlot) {
+    return scoresForJudge(this.db, eventId, judge);
   }
   saveCaptureMeta(meta: CaptureMeta) {
     return saveCaptureMeta(this.db, meta);
   }
-  getCaptureMeta(judge: JudgeSlot, standNr: string) {
-    return getCaptureMeta(this.db, judge, standNr);
+  getCaptureMeta(eventId: string, judge: JudgeSlot, standNr: string) {
+    return getCaptureMeta(this.db, eventId, judge, standNr);
   }
 
-  async driftFlags(judge: JudgeSlot): Promise<DriftFlag[]> {
-    return detectAllDrift(await scoresForJudge(this.db, judge));
+  async driftFlags(eventId: string, judge: JudgeSlot): Promise<DriftFlag[]> {
+    return detectAllDrift(await scoresForJudge(this.db, eventId, judge));
   }
 
-  async finalRanking(): Promise<FinalRanking> {
-    const [a, b] = await Promise.all([scoresForJudge(this.db, "A"), scoresForJudge(this.db, "B")]);
+  async finalRanking(eventId: string): Promise<FinalRanking> {
+    const [a, b] = await Promise.all([
+      scoresForJudge(this.db, eventId, "A"),
+      scoresForJudge(this.db, eventId, "B"),
+    ]);
     return computeFinalRanking(a, b);
   }
 }

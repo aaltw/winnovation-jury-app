@@ -9,6 +9,7 @@ function scores(
 ): Score[] {
   return rows.flatMap(({ s, r }) =>
     CRITERIA.map((c) => ({
+      eventId: "e",
       judge,
       standNr: s,
       criterion: c,

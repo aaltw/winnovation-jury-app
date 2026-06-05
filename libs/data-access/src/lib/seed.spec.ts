@@ -33,18 +33,18 @@ describe("seedDemo", () => {
   });
 
   it("scores every project on all criteria for both judges, fully placed", async () => {
-    await seedDemo(db, fixedNow);
+    const event = await seedDemo(db, fixedNow);
     for (const judge of ["A", "B"] as const) {
-      const scores = await scoresForJudge(db, judge);
+      const scores = await scoresForJudge(db, event.id, judge);
       expect(scores).toHaveLength(PROJECT_COUNT * CRITERIA.length);
       expect(scores.every((s) => s.rankPos !== null)).toBe(true);
     }
   });
 
   it("seeds judge-A drift and A↔B disagreement so the showcase screens light up", async () => {
-    await seedDemo(db, fixedNow);
-    const a = await scoresForJudge(db, "A");
-    const b = await scoresForJudge(db, "B");
+    const event = await seedDemo(db, fixedNow);
+    const a = await scoresForJudge(db, event.id, "A");
+    const b = await scoresForJudge(db, event.id, "B");
     expect(detectAllDrift(a).length).toBeGreaterThan(0);
     expect(driftList(a).length).toBeGreaterThan(0);
     expect([...computeDisagreements(a, b).values()].some((gap) => gap > 0)).toBe(true);
@@ -56,6 +56,19 @@ describe("seedDemo", () => {
     expect(second.id).toBe(first.id);
     expect(await db.events.count()).toBe(1);
     expect(await listDeelnemers(db, first.id)).toHaveLength(PROJECT_COUNT);
-    expect(await scoresForJudge(db, "A")).toHaveLength(PROJECT_COUNT * CRITERIA.length);
+    expect(await scoresForJudge(db, first.id, "A")).toHaveLength(PROJECT_COUNT * CRITERIA.length);
+  });
+
+  it("self-heals when the demo event survives but its scores were wiped (v3→v4 migration)", async () => {
+    const event = await seedDemo(db, fixedNow);
+    // Simulate the migration: the event/roster survive, scores+meta are dropped.
+    await db.scores.clear();
+    await db.captureMeta.clear();
+    expect(await scoresForJudge(db, event.id, "A")).toHaveLength(0);
+
+    const reseeded = await seedDemo(db, fixedNow);
+    expect(reseeded.id).toBe(event.id);
+    expect(await db.events.count()).toBe(1); // no duplicate event
+    expect(await scoresForJudge(db, event.id, "A")).toHaveLength(PROJECT_COUNT * CRITERIA.length);
   });
 });

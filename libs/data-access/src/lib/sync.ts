@@ -18,8 +18,8 @@ export class SyncClient {
   async push(): Promise<void> {
     const [deelnemers, scores, captureMeta] = await Promise.all([
       this.db.deelnemers.where("eventId").equals(this.eventId).toArray(),
-      this.db.scores.toArray(),
-      this.db.captureMeta.toArray(),
+      this.db.scores.where("eventId").equals(this.eventId).toArray(),
+      this.db.captureMeta.where("eventId").equals(this.eventId).toArray(),
     ]);
     await this.transport.post(`/events/${this.eventId}/changes`, {
       deelnemers: deelnemers.map((d) => ({ ...d, updatedAt: at(d) })),
@@ -48,21 +48,20 @@ export class SyncClient {
         }
         for (const raw of remote.scores as Score[]) {
           maxAt = Math.max(maxAt, at(raw));
-          const local = await this.db.scores.get([raw.judge, raw.standNr, raw.criterion]);
-          if (!local || at(local) < at(raw)) {
-            const { ...score } = raw as Score & { eventId?: string };
-            delete (score as { eventId?: string }).eventId;
-            await this.db.scores.put(score);
-          }
+          const local = await this.db.scores.get([
+            this.eventId,
+            raw.judge,
+            raw.standNr,
+            raw.criterion,
+          ]);
+          if (!local || at(local) < at(raw))
+            await this.db.scores.put({ ...raw, eventId: this.eventId });
         }
         for (const raw of remote.captureMeta as CaptureMeta[]) {
           maxAt = Math.max(maxAt, at(raw));
-          const local = await this.db.captureMeta.get([raw.judge, raw.standNr]);
-          if (!local || at(local) < at(raw)) {
-            const { ...m } = raw as CaptureMeta & { eventId?: string };
-            delete (m as { eventId?: string }).eventId;
-            await this.db.captureMeta.put(m);
-          }
+          const local = await this.db.captureMeta.get([this.eventId, raw.judge, raw.standNr]);
+          if (!local || at(local) < at(raw))
+            await this.db.captureMeta.put({ ...raw, eventId: this.eventId });
         }
       },
     );

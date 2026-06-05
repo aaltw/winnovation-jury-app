@@ -128,7 +128,13 @@ export async function seedDemo(
   now: () => number = () => Date.now(),
 ): Promise<JuryEvent> {
   const existing = await db.events.where("eventCode").equals(DEMO_EVENT_CODE).first();
-  if (existing) return existing;
+  if (existing) {
+    // Self-heal: the v3→v4 schema migration drops scores/captureMeta (the primary
+    // key gained eventId). When the demo event survives but its scores were wiped,
+    // fall through and repopulate; otherwise the seed has nothing to do.
+    const hasScores = (await db.scores.where("eventId").equals(existing.id).count()) > 0;
+    if (hasScores) return existing;
+  }
 
   let tick = now();
   const stamp = () => tick++;
@@ -155,6 +161,7 @@ export async function seedDemo(
     for (const p of PROJECTS) {
       CRITERIA.forEach((criterion, i) => {
         scores.push({
+          eventId: DEMO_EVENT_ID,
           judge,
           standNr: p.standNr,
           criterion,
@@ -164,6 +171,7 @@ export async function seedDemo(
         });
       });
       captureMeta.push({
+        eventId: DEMO_EVENT_ID,
         judge,
         standNr: p.standNr,
         keyword: p.keyword,
@@ -176,7 +184,8 @@ export async function seedDemo(
   }
 
   await db.transaction("rw", db.events, db.deelnemers, db.scores, db.captureMeta, async () => {
-    await db.events.add(event);
+    // `put` (not `add`) so the self-heal path — event present, scores wiped — is idempotent.
+    await db.events.put(event);
     await db.deelnemers.bulkPut(deelnemers);
     await db.scores.bulkPut(scores);
     await db.captureMeta.bulkPut(captureMeta);

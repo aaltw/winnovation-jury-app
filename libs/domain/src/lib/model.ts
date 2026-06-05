@@ -21,6 +21,7 @@ export interface Deelnemer {
 }
 
 export interface Score {
+  eventId: string; // the event this score belongs to; first component of the storage key
   judge: JudgeSlot;
   standNr: string;
   criterion: Criterion;
@@ -30,6 +31,7 @@ export interface Score {
 }
 
 export interface CaptureMeta {
+  eventId: string; // the event this capture belongs to; first component of the storage key
   judge: JudgeSlot;
   standNr: string;
   keyword: string;

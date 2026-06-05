@@ -11,7 +11,14 @@ function scores(
   rows: Array<{ s: string; v: Record<Criterion, ScoreValue>; r: Record<Criterion, number> }>,
 ): Score[] {
   return rows.flatMap(({ s, v, r }) =>
-    CRITERIA.map((c) => ({ judge, standNr: s, criterion: c, value: v[c], rankPos: r[c] })),
+    CRITERIA.map((c) => ({
+      eventId: "e",
+      judge,
+      standNr: s,
+      criterion: c,
+      value: v[c],
+      rankPos: r[c],
+    })),
   );
 }
 const v = (
@@ -42,6 +49,7 @@ describe("rawTotalFor", () => {
 
 describe("detectDriftForCriterion", () => {
   const mk = (standNr: string, value: number, rankPos: number): Score => ({
+    eventId: "e",
     judge: "A",
     standNr,
     criterion: "impact",
@@ -59,6 +67,7 @@ describe("detectDriftForCriterion", () => {
   });
   it("ignores unplaced deelnemers (rankPos null)", () => {
     const unplaced: Score = {
+      eventId: "e",
       judge: "A",
       standNr: "q",
       criterion: "impact",
@@ -72,12 +81,12 @@ describe("detectDriftForCriterion", () => {
 describe("detectAllDrift", () => {
   it("groups by judge and criterion", () => {
     const aImpact: Score[] = [
-      { judge: "A", standNr: "x", criterion: "impact", value: 3, rankPos: 1 },
-      { judge: "A", standNr: "y", criterion: "impact", value: 4, rankPos: 2 },
+      { eventId: "e", judge: "A", standNr: "x", criterion: "impact", value: 3, rankPos: 1 },
+      { eventId: "e", judge: "A", standNr: "y", criterion: "impact", value: 4, rankPos: 2 },
     ];
     const bImpact: Score[] = [
-      { judge: "B", standNr: "x", criterion: "impact", value: 5, rankPos: 1 },
-      { judge: "B", standNr: "y", criterion: "impact", value: 4, rankPos: 2 },
+      { eventId: "e", judge: "B", standNr: "x", criterion: "impact", value: 5, rankPos: 1 },
+      { eventId: "e", judge: "B", standNr: "y", criterion: "impact", value: 4, rankPos: 2 },
     ];
     expect(detectAllDrift([...aImpact, ...bImpact])).toEqual([
       { judge: "A", criterion: "impact", betterRanked: "x", worseRanked: "y" },
@@ -87,6 +96,7 @@ describe("detectAllDrift", () => {
 
 describe("computeDriftSeverity / driftList", () => {
   const mk = (standNr: string, value: number, rankPos: number | null): Score => ({
+    eventId: "e",
     judge: "A",
     standNr,
     criterion: "impact",
@@ -137,9 +147,9 @@ describe("commonStandNrs", () => {
 describe("ranksWithinSet", () => {
   it("recomputes 1..N ranks over the allowed set, preserving order, 1 = best", () => {
     const slice: Score[] = [
-      { judge: "A", standNr: "x", criterion: "impact", value: 5, rankPos: 1 },
-      { judge: "A", standNr: "y", criterion: "impact", value: 4, rankPos: 2 },
-      { judge: "A", standNr: "z", criterion: "impact", value: 3, rankPos: 3 },
+      { eventId: "e", judge: "A", standNr: "x", criterion: "impact", value: 5, rankPos: 1 },
+      { eventId: "e", judge: "A", standNr: "y", criterion: "impact", value: 4, rankPos: 2 },
+      { eventId: "e", judge: "A", standNr: "z", criterion: "impact", value: 3, rankPos: 3 },
     ];
     const ranks = ranksWithinSet(slice, ["x", "z"]);
     expect(ranks.get("x")).toBe(1);

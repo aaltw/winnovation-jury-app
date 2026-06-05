@@ -11,7 +11,9 @@ import {
   scoresForJudge,
 } from "./scores.repo";
 
+const EVENT = "ev1";
 const score = (standNr: string, value: Score["value"], rankPos: number | null): Score => ({
+  eventId: EVENT,
   judge: "A",
   standNr,
   criterion: "impact",
@@ -28,22 +30,25 @@ describe("scores.repo", () => {
     await db.delete();
   });
 
-  it("saves and overwrites a score by [judge+standNr+criterion]", async () => {
+  it("saves and overwrites a score by [eventId+judge+standNr+criterion]", async () => {
     await saveScore(db, score("7", 3, null));
     await saveScore(db, score("7", 4, 1)); // re-save with placement
-    const all = await scoresForJudge(db, "A");
+    const all = await scoresForJudge(db, EVENT, "A");
     expect(all).toHaveLength(1);
     expect(all[0]).toEqual(score("7", 4, 1));
   });
 
-  it("queries scores by judge only", async () => {
+  it("queries scores by event + judge", async () => {
     await saveScore(db, score("7", 3, 1));
     await saveScore(db, { ...score("7", 3, 1), judge: "B" });
-    expect(await scoresForJudge(db, "A")).toHaveLength(1);
+    await saveScore(db, { ...score("7", 3, 1), eventId: "ev2" }); // same judge+stand, other event
+    expect(await scoresForJudge(db, EVENT, "A")).toHaveLength(1);
+    expect(await scoresForJudge(db, "ev2", "A")).toHaveLength(1);
   });
 
   it("saves and reads capture meta", async () => {
     const meta: CaptureMeta = {
+      eventId: EVENT,
       judge: "A",
       standNr: "7",
       keyword: "AI-compostbak",
@@ -52,7 +57,7 @@ describe("scores.repo", () => {
       photoRef: null,
     };
     await saveCaptureMeta(db, meta);
-    expect(await getCaptureMeta(db, "A", "7")).toEqual(meta);
+    expect(await getCaptureMeta(db, EVENT, "A", "7")).toEqual(meta);
   });
 
   it("stores and retrieves a photo blob", async () => {

@@ -72,7 +72,13 @@ export class JuryStore {
   }
 
   async refreshScores(): Promise<void> {
-    this.scores.set(await this.service.scoresForJudge(this.judge()));
+    this.scores.set(await this.loadScores(this.judge()));
+  }
+
+  /** Scores for `judge` in the active event; empty when no event is joined. */
+  private loadScores(judge: JudgeSlot): Promise<Score[]> {
+    const event = this.event();
+    return event ? this.service.scoresForJudge(event.id, judge) : Promise.resolve([]);
   }
 
   async captureDeelnemer(input: CaptureInput): Promise<void> {
@@ -89,6 +95,7 @@ export class JuryStore {
     });
     for (const criterion of CRITERIA) {
       await this.service.saveScore({
+        eventId: event.id,
         judge,
         standNr: input.standNr,
         criterion,
@@ -98,6 +105,7 @@ export class JuryStore {
       });
     }
     await this.service.saveCaptureMeta({
+      eventId: event.id,
       judge,
       standNr: input.standNr,
       keyword: input.keyword,
@@ -110,7 +118,7 @@ export class JuryStore {
   }
 
   async placedFor(criterion: Criterion): Promise<Placed[]> {
-    const all = await this.service.scoresForJudge(this.judge());
+    const all = await this.loadScores(this.judge());
     return all
       .filter((s) => s.criterion === criterion && s.rankPos !== null)
       .map((s) => ({ standNr: s.standNr, value: s.value, rankPos: s.rankPos as number }));
@@ -119,7 +127,7 @@ export class JuryStore {
   /** Insert `standNr` at `index` in the criterion ordering and persist new rankPos values. */
   async applyPlacement(criterion: Criterion, standNr: string, index: number): Promise<void> {
     const judge = this.judge();
-    const all = await this.service.scoresForJudge(judge);
+    const all = await this.loadScores(judge);
     const slice = all.filter((s) => s.criterion === criterion);
     const order = slice
       .filter((s) => s.rankPos !== null)
@@ -151,7 +159,7 @@ export class JuryStore {
   }
 
   async updateScoreValue(criterion: Criterion, standNr: string, value: ScoreValue): Promise<void> {
-    const all = await this.service.scoresForJudge(this.judge());
+    const all = await this.loadScores(this.judge());
     const existing = all.find((s) => s.criterion === criterion && s.standNr === standNr);
     if (!existing) return;
     await this.service.saveScore({ ...existing, value, updatedAt: this.clock() });
@@ -160,11 +168,13 @@ export class JuryStore {
   }
 
   scoresForJudge(judge: JudgeSlot): Promise<Score[]> {
-    return this.service.scoresForJudge(judge);
+    return this.loadScores(judge);
   }
 
   metaFor(standNr: string): Promise<CaptureMeta | undefined> {
-    return this.service.getCaptureMeta(this.judge(), standNr);
+    const event = this.event();
+    if (!event) return Promise.resolve(undefined);
+    return this.service.getCaptureMeta(event.id, this.judge(), standNr);
   }
 
   async savePhoto(blob: Blob): Promise<string> {
@@ -174,21 +184,20 @@ export class JuryStore {
   }
 
   async disagreements(): Promise<Map<string, number>> {
-    const [a, b] = await Promise.all([
-      this.service.scoresForJudge("A"),
-      this.service.scoresForJudge("B"),
-    ]);
+    const [a, b] = await Promise.all([this.loadScores("A"), this.loadScores("B")]);
     return computeDisagreements(a, b);
   }
 
   async refreshDrift(): Promise<void> {
-    const scores = await this.service.scoresForJudge(this.judge());
+    const scores = await this.loadScores(this.judge());
     this.driftFlags.set(detectAllDrift(scores));
     this.driftItems.set(driftList(scores));
   }
 
   finalRanking() {
-    return this.service.finalRanking();
+    // An empty eventId scopes to zero scores → an empty ranking, which is the
+    // correct shape to render before an event is joined.
+    return this.service.finalRanking(this.event()?.id ?? "");
   }
 
   /** Test helper: wipe the IndexedDB instance. */
