@@ -1,0 +1,370 @@
+/* ============================================================
+   Winnovation Jury App — design tokens & component styles
+   Energetic student-award identity. Loosely Framna (clean,
+   structural, confident) but with a youthful, optimistic voice.
+   ============================================================ */
+
+:root {
+  /* — Ink & neutrals — */
+  --ink:        #16171D;   /* primary text, dark surfaces */
+  --ink-2:      #2C2E3A;   /* secondary dark */
+  --paper:      #FFFFFF;   /* screen surface */
+  --bg:         #FBFBF8;   /* app screen background (warm near-white) */
+  --bg-2:       #F2F2EE;   /* recessed area inside a screen */
+  --board:      #E7E7E2;   /* the review canvas behind the phones */
+  --line:       #E8E8E2;   /* hairlines */
+  --line-2:     #DBDBD3;   /* stronger hairline */
+  --muted:      #797E8C;   /* muted text */
+  --muted-2:    #A3A7B2;   /* faintest text / placeholders */
+
+  /* — Brand — */
+  --brand:      #4B3BF5;   /* electric indigo — primary actions */
+  --brand-ink:  #2A1FB0;   /* brand text on light */
+  --brand-soft: #ECEAFE;   /* brand tint background */
+
+  --coral:      #FF5A3C;   /* energy accent, winner */
+  --coral-soft: #FFE7E0;
+  --mint:       #06BE7E;   /* positive / clean / agree */
+  --mint-soft:  #DAF6EC;
+  --amber:      #F5A300;   /* drift — attention, not error */
+  --amber-soft: #FFF1D2;
+  --amber-ink:  #8A5C00;
+
+  /* — Per-criterion accents (make Compare unmistakable) — */
+  --c-innov:    #4B3BF5;   /* Innovativiteit */
+  --c-relev:    #FF5A3C;   /* Relevantie */
+  --c-haalb:    #00A7C4;   /* Haalbaarheid */
+  --c-impact:   #06BE7E;   /* Impact */
+
+  /* — Type — */
+  --font-display: "Bricolage Grotesque", Georgia, serif;
+  --font-ui:      "Hanken Grotesk", -apple-system, "Segoe UI", sans-serif;
+
+  /* — Radii — */
+  --r-screen: 44px;
+  --r-card:   20px;
+  --r-card-sm:14px;
+  --r-pill:   999px;
+  --r-chip:   10px;
+
+  /* — Shadows — */
+  --sh-card:  0 1px 2px rgba(22,23,29,.05), 0 4px 16px rgba(22,23,29,.06);
+  --sh-pop:   0 8px 28px rgba(22,23,29,.16);
+  --sh-phone: 0 2px 4px rgba(22,23,29,.06), 0 24px 60px rgba(22,23,29,.16);
+
+  /* — Phone geometry — */
+  --phone-w: 390px;
+  --phone-h: 844px;
+}
+
+* { box-sizing: border-box; }
+
+/* ============================================================
+   The review board
+   ============================================================ */
+.wv-board {
+  margin: 0;
+  background:
+    radial-gradient(1200px 600px at 15% -5%, #EFEFEA 0%, transparent 60%),
+    var(--board);
+  font-family: var(--font-ui);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  min-height: 100vh;
+}
+
+.wv-board-inner {
+  max-width: 1640px;
+  margin: 0 auto;
+  padding: 64px 56px 120px;
+}
+
+/* Board masthead */
+.wv-mast { display: flex; align-items: flex-end; justify-content: space-between; gap: 40px; flex-wrap: wrap; }
+.wv-mast-lede { max-width: 720px; }
+.wv-wordmark {
+  display: inline-flex; align-items: center; gap: 12px;
+  font-family: var(--font-display); font-weight: 800; font-size: 30px;
+  letter-spacing: -0.02em; color: var(--ink); margin: 0 0 18px;
+}
+.wv-wordmark .wv-spark {
+  width: 30px; height: 30px; border-radius: 9px; background: var(--brand);
+  display: grid; place-items: center; transform: rotate(-6deg);
+}
+.wv-mast h1 {
+  font-family: var(--font-display); font-weight: 800;
+  font-size: 52px; line-height: 1.02; letter-spacing: -0.03em; margin: 0 0 16px;
+  text-wrap: balance;
+}
+.wv-mast h1 em { font-style: normal; color: var(--brand); }
+.wv-mast p { font-size: 17px; line-height: 1.55; color: var(--ink-2); margin: 0; }
+
+.wv-legend { display: flex; flex-direction: column; gap: 10px; }
+.wv-legend-row { display: flex; align-items: center; gap: 10px; font-size: 13.5px; color: var(--ink-2); }
+.wv-legend-dot { width: 12px; height: 12px; border-radius: 4px; flex: none; }
+
+/* Rationale strip */
+.wv-rationale {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px;
+  background: var(--line-2); border: 1px solid var(--line-2); border-radius: 18px;
+  overflow: hidden; margin: 40px 0 8px;
+}
+.wv-rationale .cell { background: #F6F6F1; padding: 22px 24px; }
+.wv-rationale .cell h4 {
+  margin: 0 0 8px; font-family: var(--font-display); font-weight: 700; font-size: 16px; letter-spacing: -0.01em;
+  display: flex; align-items: center; gap: 9px;
+}
+.wv-rationale .cell h4 .n {
+  width: 22px; height: 22px; border-radius: 6px; background: var(--ink); color: #fff;
+  font-size: 12px; font-weight: 700; display: grid; place-items: center; font-family: var(--font-ui);
+}
+.wv-rationale .cell p { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--muted); }
+
+/* Section labels on the board */
+.wv-section { margin: 60px 0 0; }
+.wv-section-head { display: flex; align-items: baseline; gap: 16px; margin: 0 0 8px; }
+.wv-section-head .idx {
+  font-family: var(--font-display); font-weight: 800; font-size: 22px; color: var(--brand);
+  letter-spacing: -0.02em; min-width: 30px;
+}
+.wv-section-head h2 { font-family: var(--font-display); font-weight: 700; font-size: 24px; letter-spacing: -0.02em; margin: 0; }
+.wv-section-head p { font-size: 14.5px; color: var(--muted); margin: 0; }
+.wv-section-head .divider { flex: 1; height: 1px; background: var(--line-2); align-self: center; }
+
+.wv-row { display: flex; gap: 40px; flex-wrap: wrap; align-items: flex-start; margin-top: 34px; }
+
+/* A labelled phone slot */
+.wv-slot { display: flex; flex-direction: column; gap: 14px; }
+.wv-slot-label { display: flex; align-items: center; gap: 9px; font-size: 13.5px; font-weight: 600; color: var(--ink-2); }
+.wv-slot-label .tag {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--muted); background: #fff; border: 1px solid var(--line-2);
+  padding: 3px 9px; border-radius: var(--r-pill);
+}
+.wv-slot-note { font-size: 12.5px; color: var(--muted); max-width: var(--phone-w); line-height: 1.45; }
+
+/* ============================================================
+   Phone frame (bare screen, no bezel)
+   ============================================================ */
+.wv-phone {
+  width: var(--phone-w); height: var(--phone-h);
+  background: var(--bg); border-radius: var(--r-screen);
+  box-shadow: var(--sh-phone);
+  position: relative; overflow: hidden;
+  display: flex; flex-direction: column;
+  border: 1px solid rgba(0,0,0,.04);
+}
+.wv-phone.wide { width: 430px; }
+
+/* Status bar */
+.wv-status {
+  height: 44px; flex: none; display: flex; align-items: center; justify-content: space-between;
+  padding: 0 26px 0 30px; font-size: 14px; font-weight: 700; color: var(--ink);
+  position: relative; z-index: 5;
+}
+.wv-status.on-dark { color: #fff; }
+.wv-status .si { display: flex; align-items: center; gap: 6px; }
+.wv-status .si svg { display: block; }
+
+/* Scrollable screen body */
+.wv-screen { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
+.wv-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; }
+.wv-scroll::-webkit-scrollbar { width: 0; height: 0; }
+
+/* Top app bar inside a screen */
+.wv-appbar {
+  display: flex; align-items: center; gap: 12px; padding: 6px 20px 14px;
+  position: sticky; top: 0; background: var(--bg); z-index: 4;
+}
+.wv-appbar.bordered { border-bottom: 1px solid var(--line); }
+.wv-appbar h2 { font-family: var(--font-display); font-weight: 700; font-size: 21px; letter-spacing: -0.02em; margin: 0; flex: 1; }
+.wv-appbar .sub { font-size: 12.5px; color: var(--muted); font-weight: 500; }
+.wv-appbar-btn {
+  width: 38px; height: 38px; border-radius: var(--r-pill); border: none; background: #fff;
+  border: 1px solid var(--line-2); display: grid; place-items: center; cursor: pointer; flex: none;
+  color: var(--ink); transition: background .15s;
+}
+.wv-appbar-btn:hover { background: var(--bg-2); }
+
+.wv-pad { padding: 4px 20px 24px; }
+.wv-pad-x { padding-left: 20px; padding-right: 20px; }
+
+/* Bottom action dock (thumb zone) */
+.wv-dock {
+  flex: none; padding: 14px 20px calc(14px + env(safe-area-inset-bottom, 8px));
+  background: linear-gradient(to top, var(--bg) 70%, rgba(251,251,248,0));
+  display: flex; flex-direction: column; gap: 10px; position: relative; z-index: 4;
+}
+.wv-dock.bordered { border-top: 1px solid var(--line); background: var(--bg); }
+
+/* ============================================================
+   Buttons
+   ============================================================ */
+.wv-btn {
+  font-family: var(--font-ui); font-weight: 700; font-size: 16px;
+  border-radius: var(--r-pill); border: none; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 9px;
+  min-height: 52px; padding: 0 22px; width: 100%;
+  transition: transform .12s var(--ease, ease), background .15s, box-shadow .15s, opacity .15s;
+  -webkit-tap-highlight-color: transparent; letter-spacing: -0.01em;
+}
+.wv-btn:active { transform: scale(.975); }
+.wv-btn-primary { background: var(--brand); color: #fff; box-shadow: 0 6px 18px rgba(75,59,245,.28); }
+.wv-btn-primary:hover { background: #3f31df; }
+.wv-btn-ink { background: var(--ink); color: #fff; }
+.wv-btn-ink:hover { background: #000; }
+.wv-btn-coral { background: var(--coral); color: #fff; box-shadow: 0 6px 18px rgba(255,90,60,.28); }
+.wv-btn-ghost { background: transparent; color: var(--ink); border: 1.5px solid var(--line-2); box-shadow: none; }
+.wv-btn-ghost:hover { background: var(--bg-2); }
+.wv-btn-soft { background: var(--brand-soft); color: var(--brand-ink); }
+.wv-btn-soft:hover { filter: brightness(.97); }
+.wv-btn:disabled { opacity: .42; cursor: not-allowed; transform: none; box-shadow: none; }
+.wv-btn-sm { min-height: 40px; font-size: 14px; padding: 0 16px; width: auto; }
+.wv-btn-link { background: none; border: none; color: var(--brand-ink); font-weight: 700; font-size: 14.5px; cursor: pointer; padding: 8px; font-family: var(--font-ui); }
+
+/* ============================================================
+   Generic cards & chips
+   ============================================================ */
+.wv-card { background: #fff; border: 1px solid var(--line); border-radius: var(--r-card); box-shadow: var(--sh-card); }
+.wv-chip {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700;
+  padding: 4px 10px; border-radius: var(--r-pill); letter-spacing: 0.01em; white-space: nowrap;
+}
+.wv-chip-ink { background: var(--ink); color: #fff; }
+.wv-chip-line { background: #fff; border: 1px solid var(--line-2); color: var(--ink-2); }
+.wv-chip-stand { background: var(--ink); color: #fff; font-variant-numeric: tabular-nums; }
+.wv-chip-amber { background: var(--amber-soft); color: var(--amber-ink); }
+.wv-chip-mint { background: var(--mint-soft); color: #066b48; }
+.wv-chip-brand { background: var(--brand-soft); color: var(--brand-ink); }
+
+/* eyebrow label */
+.wv-eyebrow { font-size: 11.5px; font-weight: 800; letter-spacing: 0.10em; text-transform: uppercase; color: var(--muted); }
+
+/* ============================================================
+   Deelnemer card — the reusable unit
+   ============================================================ */
+.wv-deel { display: flex; align-items: center; gap: 13px; padding: 12px; background: #fff; border: 1px solid var(--line); border-radius: var(--r-card-sm); box-shadow: var(--sh-card); position: relative; }
+.wv-deel.tappable { cursor: pointer; transition: border-color .15s, transform .12s; }
+.wv-deel.tappable:hover { border-color: var(--line-2); }
+.wv-deel.tappable:active { transform: scale(.99); }
+.wv-deel-photo {
+  width: 54px; height: 54px; border-radius: 12px; flex: none; overflow: hidden;
+  display: grid; place-items: center; position: relative; color: #fff;
+  font-family: var(--font-display); font-weight: 800; font-size: 22px;
+}
+.wv-deel-photo img { width: 100%; height: 100%; object-fit: cover; }
+.wv-deel-body { flex: 1; min-width: 0; }
+.wv-deel-kw { font-family: var(--font-display); font-weight: 700; font-size: 16.5px; letter-spacing: -0.01em; line-height: 1.15; }
+.wv-deel-meta { font-size: 12.5px; color: var(--muted); margin-top: 2px; display: flex; align-items: center; gap: 7px; }
+.wv-deel-meta .dot { width: 3px; height: 3px; border-radius: 50%; background: var(--muted-2); }
+.wv-deel-rank {
+  flex: none; width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center;
+  font-family: var(--font-display); font-weight: 800; font-size: 17px; background: var(--bg-2); color: var(--ink);
+}
+.wv-deel-rank .lbl { font-size: 8px; font-weight: 700; color: var(--muted); letter-spacing: .04em; }
+
+/* ============================================================
+   Score input — segmented 1–5 pills
+   ============================================================ */
+.wv-score { margin-bottom: 18px; }
+.wv-score-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; }
+.wv-score-name { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 15px; }
+.wv-score-name .swatch { width: 11px; height: 11px; border-radius: 4px; flex: none; }
+.wv-score-read { font-size: 12.5px; font-weight: 700; color: var(--muted); }
+.wv-score-read.set { color: var(--ink); }
+.wv-seg { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.wv-seg-pill {
+  position: relative; border: 1.5px solid var(--line-2); background: #fff; border-radius: 13px;
+  padding: 9px 0 7px; cursor: pointer; text-align: center; transition: all .14s var(--ease, ease);
+  -webkit-tap-highlight-color: transparent; min-height: 56px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+}
+.wv-seg-pill .num { font-family: var(--font-display); font-weight: 800; font-size: 19px; line-height: 1; color: var(--ink); }
+.wv-seg-pill .tip { font-size: 9px; font-weight: 700; color: var(--muted-2); letter-spacing: .01em; line-height: 1; }
+.wv-seg-pill:hover { border-color: var(--muted-2); }
+.wv-seg-pill.on { border-color: var(--accent, var(--brand)); background: var(--accent, var(--brand)); }
+.wv-seg-pill.on .num { color: #fff; }
+.wv-seg-pill.on .tip { color: rgba(255,255,255,.85); }
+
+/* ============================================================
+   Drift flag
+   ============================================================ */
+.wv-drift {
+  display: flex; align-items: center; gap: 11px; padding: 12px 14px; border-radius: var(--r-card-sm);
+  background: var(--amber-soft); border: 1px solid #F4DC9E; cursor: pointer; transition: transform .12s;
+}
+.wv-drift:active { transform: scale(.99); }
+.wv-drift-ic { width: 30px; height: 30px; border-radius: 9px; background: var(--amber); color: #fff; display: grid; place-items: center; flex: none; }
+.wv-drift-body { flex: 1; min-width: 0; }
+.wv-drift-t { font-weight: 700; font-size: 13.5px; color: var(--amber-ink); }
+.wv-drift-d { font-size: 12px; color: #9b7b30; margin-top: 1px; }
+
+/* ============================================================
+   Banner (vervolgproject reminder etc.)
+   ============================================================ */
+.wv-banner {
+  display: flex; align-items: flex-start; gap: 11px; padding: 13px 14px; border-radius: var(--r-card-sm);
+  font-size: 13px; line-height: 1.4;
+}
+.wv-banner-amber { background: var(--amber-soft); border: 1px solid #F4DC9E; color: var(--amber-ink); }
+.wv-banner .ic { flex: none; margin-top: 1px; }
+.wv-banner b { font-weight: 800; }
+
+/* Sync status — ambient */
+.wv-sync { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.wv-sync .pip { width: 7px; height: 7px; border-radius: 50%; background: var(--mint); box-shadow: 0 0 0 0 rgba(6,190,126,.5); }
+.wv-sync.offline .pip { background: var(--amber); }
+.wv-sync.syncing .pip { background: var(--brand); animation: wv-pulse 1.1s infinite; }
+@keyframes wv-pulse { 0%{ box-shadow: 0 0 0 0 rgba(75,59,245,.45);} 70%{ box-shadow: 0 0 0 6px rgba(75,59,245,0);} 100%{ box-shadow: 0 0 0 0 rgba(75,59,245,0);} }
+
+/* ============================================================
+   Progress (Event home)
+   ============================================================ */
+.wv-progress { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.wv-stat { background: #fff; border: 1px solid var(--line); border-radius: var(--r-card-sm); padding: 14px 14px 12px; }
+.wv-stat .big { font-family: var(--font-display); font-weight: 800; font-size: 30px; letter-spacing: -0.02em; line-height: 1; }
+.wv-stat .lbl { font-size: 11.5px; color: var(--muted); font-weight: 600; margin-top: 5px; }
+.wv-stat.flag .big { color: var(--amber-ink); }
+
+.wv-bar { height: 8px; border-radius: 999px; background: var(--bg-2); overflow: hidden; display: flex; }
+.wv-bar > span { display: block; height: 100%; }
+
+/* Field */
+.wv-field { margin-bottom: 16px; }
+.wv-label { display: block; font-size: 13px; font-weight: 700; margin-bottom: 7px; color: var(--ink-2); }
+.wv-label .req { color: var(--coral); }
+.wv-label .opt { color: var(--muted-2); font-weight: 600; }
+.wv-input, .wv-textarea {
+  width: 100%; border: 1.5px solid var(--line-2); border-radius: 13px; background: #fff;
+  padding: 13px 14px; font-size: 15.5px; font-family: var(--font-ui); color: var(--ink); transition: border-color .15s;
+}
+.wv-input::placeholder, .wv-textarea::placeholder { color: var(--muted-2); }
+.wv-input:focus, .wv-textarea:focus { outline: none; border-color: var(--brand); }
+.wv-textarea { resize: none; line-height: 1.45; }
+.wv-input.big { font-family: var(--font-display); font-weight: 700; font-size: 19px; }
+
+/* Toggle switch */
+.wv-switch { width: 50px; height: 30px; border-radius: 999px; background: var(--line-2); position: relative; cursor: pointer; transition: background .18s; border: none; flex: none; }
+.wv-switch.on { background: var(--brand); }
+.wv-switch .knob { position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.2); transition: transform .18s var(--ease, ease); }
+.wv-switch.on .knob { transform: translateX(20px); }
+.wv-toggle-row { display: flex; align-items: center; gap: 12px; padding: 14px; border: 1.5px solid var(--line-2); border-radius: 13px; }
+.wv-toggle-row.on { border-color: var(--brand); background: var(--brand-soft); }
+.wv-toggle-row .lbl { flex: 1; }
+.wv-toggle-row .lbl .t { font-weight: 700; font-size: 14.5px; }
+.wv-toggle-row .lbl .d { font-size: 12px; color: var(--muted); margin-top: 1px; }
+
+/* Empty states */
+.wv-empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; padding: 48px 30px; }
+.wv-empty .ic { width: 60px; height: 60px; border-radius: 18px; background: var(--bg-2); display: grid; place-items: center; color: var(--muted-2); margin-bottom: 6px; }
+.wv-empty h3 { font-family: var(--font-display); font-weight: 700; font-size: 18px; margin: 0; }
+.wv-empty p { font-size: 13.5px; color: var(--muted); margin: 0; max-width: 260px; line-height: 1.45; }
+.wv-empty.clean .ic { background: var(--mint-soft); color: var(--mint); }
+
+.wv-list { display: flex; flex-direction: column; gap: 10px; }
+.wv-divider-label { display: flex; align-items: center; gap: 12px; margin: 22px 0 12px; }
+.wv-divider-label .t { font-size: 12px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.wv-divider-label .ln { flex: 1; height: 1px; background: var(--line); }
+
+.wv-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
