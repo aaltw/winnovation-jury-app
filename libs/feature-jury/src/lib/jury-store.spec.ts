@@ -1,6 +1,19 @@
 import "fake-indexeddb/auto";
 import { TestBed } from "@angular/core/testing";
-import { CRITERIA, type Criterion, type ScoreValue } from "@winnovation/domain";
+import {
+  JuryDb,
+  type Remote,
+  type RemoteEventInfo,
+  type Transport,
+} from "@winnovation/data-access";
+import {
+  type CaptureMeta,
+  CRITERIA,
+  type Criterion,
+  type Deelnemer,
+  type Score,
+  type ScoreValue,
+} from "@winnovation/domain";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { type CaptureInput, JuryStore } from "./jury-store";
 
@@ -26,10 +39,85 @@ const flat = (v: ScoreValue): Record<Criterion, ScoreValue> => ({
   impact: v,
 });
 
+/** A remote that always fails — the local-only / offline path. */
+const offlineRemote: Remote = {
+  createEvent: () => Promise.reject(new Error("offline")),
+  joinEvent: () => Promise.resolve(null),
+  transportFor: () => ({
+    post: () => Promise.reject(new Error("offline")),
+    get: () => Promise.reject(new Error("offline")),
+  }),
+};
+
+function lww<T extends { updatedAt?: number }>(map: Map<string, T>, key: string, row: T): void {
+  const existing = map.get(key);
+  if (!existing || (row.updatedAt ?? 0) > (existing.updatedAt ?? 0)) map.set(key, row);
+}
+
+/** An in-memory stand-in for the sync-api: last-write-wins + `since` filtering. */
+function fakeBackend() {
+  const events = new Map<string, RemoteEventInfo>(); // eventCode → info
+  const deelnemers = new Map<string, Deelnemer>();
+  const scores = new Map<string, Score>();
+  const captureMeta = new Map<string, CaptureMeta>();
+  let seq = 0;
+
+  const since = (path: string) => Number(new URL(path, "http://x").searchParams.get("since") ?? 0);
+  const pick = <T extends { eventId: string; updatedAt?: number }>(
+    map: Map<string, T>,
+    id: string,
+    after: number,
+  ) => [...map.values()].filter((r) => r.eventId === id && (r.updatedAt ?? 0) > after);
+
+  const remote: Remote = {
+    createEvent: (name, date) => {
+      seq += 1;
+      const info: RemoteEventInfo = { id: `srv-${seq}`, name, date, eventCode: `S${seq}` };
+      events.set(info.eventCode, info);
+      return Promise.resolve({ id: info.id, eventCode: info.eventCode });
+    },
+    joinEvent: (code) => Promise.resolve(events.get(code) ?? null),
+    transportFor: (code) => {
+      const eventId = () => {
+        const info = events.get(code());
+        if (!info) throw new Error("forbidden"); // mirrors the server's x-event-code guard
+        return info.id;
+      };
+      const transport: Transport = {
+        post: (_path, body) => {
+          const id = eventId();
+          const b = body as {
+            deelnemers?: Deelnemer[];
+            scores?: Score[];
+            captureMeta?: CaptureMeta[];
+          };
+          for (const d of b.deelnemers ?? []) lww(deelnemers, `${id}|${d.standNr}`, d);
+          for (const s of b.scores ?? [])
+            lww(scores, `${id}|${s.judge}|${s.standNr}|${s.criterion}`, s);
+          for (const m of b.captureMeta ?? []) lww(captureMeta, `${id}|${m.judge}|${m.standNr}`, m);
+          return Promise.resolve({ ok: true });
+        },
+        get: (path) => {
+          const id = eventId();
+          const after = since(path);
+          return Promise.resolve({
+            deelnemers: pick(deelnemers, id, after),
+            scores: pick(scores, id, after),
+            captureMeta: pick(captureMeta, id, after),
+          });
+        },
+      };
+      return transport;
+    },
+  };
+  return { remote, events, deelnemers, scores, captureMeta };
+}
+
 describe("JuryStore", () => {
   let store: JuryStore;
   beforeEach(() => {
     store = TestBed.inject(JuryStore);
+    store.setRemoteForTest(offlineRemote); // local-only: unit tests never hit the network
   });
   afterEach(async () => {
     await store.resetForTest();
@@ -145,5 +233,102 @@ describe("JuryStore", () => {
     await store.applyPlacement("impact", "1", 1);
     const gaps = await store.disagreements();
     expect(gaps.get("1")).toBeGreaterThan(0);
+  });
+});
+
+describe("JuryStore sync", () => {
+  let dbSeq = 0;
+  const created: JuryStore[] = [];
+
+  // Fresh store, isolated IndexedDB (a distinct name = a distinct "device").
+  const freshStore = (remote: Remote, clockBase: number): JuryStore => {
+    dbSeq += 1;
+    const store = new JuryStore();
+    store.setDbForTest(new JuryDb(`sync-test-${dbSeq}`));
+    store.setRemoteForTest(remote);
+    let t = clockBase;
+    store.setClockForTest(() => ++t); // distinct, monotonic stamps so LWW is deterministic
+    created.push(store);
+    return store;
+  };
+
+  afterEach(async () => {
+    for (const s of created) await s.resetForTest();
+    created.length = 0;
+  });
+
+  it("createEvent registers with the server and pushes captured rows", async () => {
+    const backend = fakeBackend();
+    const store = freshStore(backend.remote, 1000);
+    store.setJudge("A");
+    await store.createEvent("Winnovation", "2026-06-05");
+
+    expect(store.event()?.id).toBe("srv-1");
+    expect(backend.events.has(store.event()?.eventCode ?? "")).toBe(true);
+
+    await store.captureDeelnemer(capture("1", flat(5)));
+    await store.settleSyncForTest();
+
+    expect([...backend.deelnemers.values()].map((d) => d.standNr)).toEqual(["1"]);
+    expect(backend.scores.size).toBe(CRITERIA.length);
+  });
+
+  it("createEvent falls back to a local-only event when the server is unreachable", async () => {
+    const store = freshStore(offlineRemote, 1000);
+    await store.createEvent("Winnovation", "2026-06-05");
+
+    expect(store.event()).not.toBeNull();
+    expect(store.event()?.id.startsWith("srv-")).toBe(false);
+
+    store.setJudge("A");
+    await store.captureDeelnemer(capture("1", flat(5)));
+    await store.settleSyncForTest();
+    expect(await store.scoresForJudge("A")).toHaveLength(CRITERIA.length);
+  });
+
+  it("joinEvent returns false for an unknown code", async () => {
+    const backend = fakeBackend();
+    const store = freshStore(backend.remote, 1000);
+    expect(await store.joinEvent("NOPE", "B")).toBe(false);
+  });
+
+  it("shares one event across two devices (A captures, B joins and pulls, both reconcile)", async () => {
+    const backend = fakeBackend();
+    const deviceA = freshStore(backend.remote, 1_000);
+    const deviceB = freshStore(backend.remote, 100_000); // strictly later stamps
+
+    // Device A creates the event online, captures two stands, ranks them on impact.
+    await deviceA.createEvent("Winnovation", "2026-06-05");
+    deviceA.setJudge("A");
+    await deviceA.captureDeelnemer(capture("1", flat(5)));
+    await deviceA.captureDeelnemer(capture("2", flat(3)));
+    await deviceA.applyPlacement("impact", "1", 0);
+    await deviceA.applyPlacement("impact", "2", 1);
+    await deviceA.settleSyncForTest();
+
+    const code = deviceA.event()?.eventCode ?? "";
+
+    // Device B joins by code → pulls A's roster and A's scores.
+    expect(await deviceB.joinEvent(code, "B")).toBe(true);
+    expect(deviceB.event()?.id).toBe(deviceA.event()?.id);
+    expect(
+      deviceB
+        .deelnemers()
+        .map((d) => d.standNr)
+        .sort(),
+    ).toEqual(["1", "2"]);
+    expect(await deviceB.scoresForJudge("A")).toHaveLength(2 * CRITERIA.length);
+
+    // B scores the same stands oppositely; disagreements span both devices on B.
+    await deviceB.captureDeelnemer(capture("1", flat(5)));
+    await deviceB.captureDeelnemer(capture("2", flat(3)));
+    await deviceB.applyPlacement("impact", "2", 0);
+    await deviceB.applyPlacement("impact", "1", 1);
+    await deviceB.settleSyncForTest();
+    expect((await deviceB.disagreements()).get("1") ?? 0).toBeGreaterThan(0);
+
+    // A refreshes → now sees B's scores pulled from the server.
+    await deviceA.refreshDeelnemers();
+    expect(await deviceA.scoresForJudge("B")).toHaveLength(2 * CRITERIA.length);
   });
 });

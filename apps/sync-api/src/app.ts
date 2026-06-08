@@ -30,7 +30,14 @@ export function createApp(store: SyncStore, gen: IdGen = defaultGen) {
   app.post("/events/:code/join", (c) => {
     const event = store.findEventByCode(c.req.param("code"));
     if (!event) return c.json({ error: "unknown event" }, 404);
-    return c.json({ eventId: event.id, name: event.name });
+    // Return the full event so the joining device can persist a complete
+    // JuryEvent locally (it only had the code typed in by the user).
+    return c.json({
+      eventId: event.id,
+      name: event.name,
+      date: event.date,
+      eventCode: event.eventCode,
+    });
   });
 
   // Lightweight guard: the event code is the shared secret (v1; harden later).

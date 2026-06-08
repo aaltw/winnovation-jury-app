@@ -23,7 +23,12 @@ describe("sync-api: events", () => {
     await app.request("/events", json({ name: "W", date: "2026-06-05" }));
     const res = await app.request("/events/ABC123/join", { method: "POST" });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ eventId: "e1", name: "W" });
+    expect(await res.json()).toEqual({
+      eventId: "e1",
+      name: "W",
+      date: "2026-06-05",
+      eventCode: "ABC123",
+    });
   });
 
   it("returns 404 for an unknown code", async () => {

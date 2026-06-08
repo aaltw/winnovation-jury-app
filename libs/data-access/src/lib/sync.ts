@@ -16,11 +16,22 @@ export class SyncClient {
   ) {}
 
   async push(): Promise<void> {
-    const [deelnemers, scores, captureMeta] = await Promise.all([
-      this.db.deelnemers.where("eventId").equals(this.eventId).toArray(),
-      this.db.scores.where("eventId").equals(this.eventId).toArray(),
-      this.db.captureMeta.where("eventId").equals(this.eventId).toArray(),
-    ]);
+    // Read all three tables in one transaction so the pushed snapshot is a
+    // single consistent view, even if a write lands mid-read.
+    const { deelnemers, scores, captureMeta } = await this.db.transaction(
+      "r",
+      this.db.deelnemers,
+      this.db.scores,
+      this.db.captureMeta,
+      async () => {
+        const [d, s, m] = await Promise.all([
+          this.db.deelnemers.where("eventId").equals(this.eventId).toArray(),
+          this.db.scores.where("eventId").equals(this.eventId).toArray(),
+          this.db.captureMeta.where("eventId").equals(this.eventId).toArray(),
+        ]);
+        return { deelnemers: d, scores: s, captureMeta: m };
+      },
+    );
     await this.transport.post(`/events/${this.eventId}/changes`, {
       deelnemers: deelnemers.map((d) => ({ ...d, updatedAt: at(d) })),
       scores: scores.map((s) => ({ ...s, eventId: this.eventId, updatedAt: at(s) })),

@@ -1,5 +1,12 @@
 import { Injectable, signal } from "@angular/core";
-import { JuryDb, JuryService, putPhoto } from "@winnovation/data-access";
+import {
+  JuryDb,
+  JuryService,
+  putPhoto,
+  type Remote,
+  RemoteGateway,
+  SyncClient,
+} from "@winnovation/data-access";
 import {
   type CaptureMeta,
   CRITERIA,
@@ -40,6 +47,29 @@ export class JuryStore {
     this.clock = fn;
   }
 
+  /** Best-effort mirror to the sync-api. Null until an event is created/joined online. */
+  private remote: Remote = new RemoteGateway("/api");
+  private sync: SyncClient | null = null;
+  private pushing = false;
+  private pushQueued = false;
+  private pushLoop: Promise<void> = Promise.resolve();
+
+  setRemoteForTest(remote: Remote): void {
+    this.remote = remote;
+  }
+
+  /** Swap in an isolated DB (separate IndexedDB name) to simulate a second device in tests. */
+  setDbForTest(db: JuryDb): void {
+    this.db = db;
+    this.service = new JuryService(db);
+    this.sync = null;
+  }
+
+  /** Test helper: await any in-flight/queued push so assertions see the pushed state. */
+  settleSyncForTest(): Promise<void> {
+    return this.pushLoop;
+  }
+
   readonly event = signal<JuryEvent | null>(null);
   readonly judge = signal<JudgeSlot>("A");
   readonly deelnemers = signal<Deelnemer[]>([]);
@@ -52,21 +82,41 @@ export class JuryStore {
   }
 
   async createEvent(name: string, date: string): Promise<void> {
-    this.event.set(await this.service.createEvent({ name, date }));
+    try {
+      // Server-authoritative: it mints the id+code both devices must share.
+      const { id, eventCode } = await this.remote.createEvent(name, date);
+      const event: JuryEvent = { id, name, date, eventCode };
+      await this.db.events.put(event);
+      this.event.set(event);
+      this.attachSync(event);
+    } catch {
+      // Offline: a local-only event (random id+code, no cross-device sync).
+      this.sync = null;
+      this.event.set(await this.service.createEvent({ name, date }));
+    }
   }
 
   async joinEvent(code: string, slot: JudgeSlot): Promise<boolean> {
-    const found = await this.service.findEventByCode(code);
-    if (!found) return false;
+    // Local first (already on this device, e.g. the seeded demo or after a reload);
+    // otherwise ask the server, which returns the full event to persist.
+    let found = await this.service.findEventByCode(code);
+    if (!found) {
+      const info = await this.remote.joinEvent(code).catch(() => null);
+      if (!info) return false;
+      found = { id: info.id, name: info.name, date: info.date, eventCode: info.eventCode };
+      await this.db.events.put(found);
+    }
     this.event.set(found);
     this.judge.set(slot);
-    await this.refreshDeelnemers();
+    this.attachSync(found);
+    await this.refreshDeelnemers(); // pulls remote rows, then loads from local
     return true;
   }
 
   async refreshDeelnemers(): Promise<void> {
     const event = this.event();
     if (!event) return;
+    await this.pullNow();
     this.deelnemers.set(await this.service.listDeelnemers(event.id));
     await this.refreshScores();
   }
@@ -115,6 +165,7 @@ export class JuryStore {
       updatedAt,
     });
     await this.refreshDeelnemers();
+    this.pushSoon();
   }
 
   async placedFor(criterion: Criterion): Promise<Placed[]> {
@@ -143,6 +194,7 @@ export class JuryStore {
     }
     await this.refreshScores();
     await this.refreshDrift();
+    this.pushSoon();
   }
 
   /** "Placed" = all four criteria carry a non-null rankPos for this standNr. */
@@ -165,6 +217,7 @@ export class JuryStore {
     await this.service.saveScore({ ...existing, value, updatedAt: this.clock() });
     await this.refreshScores();
     await this.refreshDrift();
+    this.pushSoon();
   }
 
   scoresForJudge(judge: JudgeSlot): Promise<Score[]> {
@@ -184,6 +237,7 @@ export class JuryStore {
   }
 
   async disagreements(): Promise<Map<string, number>> {
+    await this.pullNow();
     const [a, b] = await Promise.all([this.loadScores("A"), this.loadScores("B")]);
     return computeDisagreements(a, b);
   }
@@ -194,10 +248,57 @@ export class JuryStore {
     this.driftItems.set(driftList(scores));
   }
 
-  finalRanking() {
+  async finalRanking() {
+    await this.pullNow();
     // An empty eventId scopes to zero scores → an empty ranking, which is the
     // correct shape to render before an event is joined.
     return this.service.finalRanking(this.event()?.id ?? "");
+  }
+
+  /** Point the sync client at `event`; subsequent push/pull mirror it to the server. */
+  private attachSync(event: JuryEvent): void {
+    this.sync = new SyncClient(
+      this.db,
+      this.remote.transportFor(() => event.eventCode),
+      event.id,
+    );
+  }
+
+  /** Pull remote changes into the local cache. Best-effort: silent when offline. */
+  private async pullNow(): Promise<void> {
+    try {
+      await this.sync?.pull();
+    } catch {
+      // Offline or server unreachable: keep working from the local cache.
+    }
+  }
+
+  /**
+   * Schedule a push. Non-blocking and coalescing: a burst of writes results in at
+   * most one in-flight push plus one queued follow-up (which sends the final
+   * snapshot). Errors are swallowed — the local IndexedDB stays the source of truth.
+   */
+  private pushSoon(): void {
+    if (!this.sync) return;
+    this.pushQueued = true;
+    if (this.pushing) return;
+    this.pushing = true;
+    this.pushLoop = this.runPushLoop();
+  }
+
+  private async runPushLoop(): Promise<void> {
+    try {
+      while (this.pushQueued) {
+        this.pushQueued = false;
+        try {
+          await this.sync?.push();
+        } catch {
+          // Best-effort; the queued snapshot will retry on the next write.
+        }
+      }
+    } finally {
+      this.pushing = false;
+    }
   }
 
   /** Test helper: wipe the IndexedDB instance. */
