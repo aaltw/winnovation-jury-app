@@ -7,6 +7,9 @@ export interface EventRow {
   date: string;
   eventCode: string;
 }
+export interface EventListItem extends EventRow {
+  projectCount: number;
+}
 export interface SyncDeelnemer {
   eventId: string;
   standNr: string;
@@ -43,6 +46,7 @@ export interface SyncStore {
   findEventByCode(eventCode: string): EventRow | undefined;
   applyChanges(eventId: string, changes: ChangeSet): void;
   changesSince(eventId: string, since: number): ChangeSet;
+  listEvents(): EventListItem[];
 }
 
 function lww<T extends { updatedAt: number }>(map: Map<string, T>, key: string, row: T): void {
@@ -80,5 +84,12 @@ export class InMemoryStore implements SyncStore {
       scores: pick(this.scores),
       captureMeta: pick(this.captureMeta),
     };
+  }
+
+  listEvents(): EventListItem[] {
+    return [...this.events.values()].map((e) => ({
+      ...e,
+      projectCount: [...this.deelnemers.values()].filter((d) => d.eventId === e.id).length,
+    }));
   }
 }

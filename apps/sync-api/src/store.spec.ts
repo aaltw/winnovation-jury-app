@@ -63,3 +63,32 @@ describe("InMemoryStore", () => {
     expect(store.changesSince("e1", 0).scores[0].value).toBe(5);
   });
 });
+
+describe("InMemoryStore.listEvents", () => {
+  it("lists events with a per-event project count", () => {
+    const store = new InMemoryStore();
+    store.createEvent({ id: "e1", name: "Winnovation", date: "2026-06-05", eventCode: "ABC123" });
+    store.applyChanges("e1", {
+      deelnemers: [
+        { eventId: "e1", standNr: "1", projectgroep: "g1", isVervolgproject: false, updatedAt: 1 },
+        { eventId: "e1", standNr: "2", projectgroep: "g2", isVervolgproject: false, updatedAt: 1 },
+      ],
+      scores: [],
+      captureMeta: [],
+    });
+    const list = store.listEvents();
+    expect(list).toHaveLength(1);
+    expect(list[0]).toMatchObject({
+      id: "e1",
+      name: "Winnovation",
+      eventCode: "ABC123",
+      projectCount: 2,
+    });
+  });
+
+  it("reports zero projects for an empty event", () => {
+    const store = new InMemoryStore();
+    store.createEvent({ id: "e1", name: "Leeg", date: "2026-06-05", eventCode: "EMPTY1" });
+    expect(store.listEvents()[0].projectCount).toBe(0);
+  });
+});
