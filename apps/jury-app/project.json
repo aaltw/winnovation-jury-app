@@ -49,12 +49,23 @@
     "serve": {
       "continuous": true,
       "executor": "@angular/build:dev-server",
+      "options": {
+        "proxyConfig": "apps/jury-app/proxy.conf.json"
+      },
       "configurations": {
         "production": {
           "buildTarget": "jury-app:build:production"
         },
         "development": {
           "buildTarget": "jury-app:build:development"
+        },
+        "tunnel": {
+          "buildTarget": "jury-app:build:development",
+          "host": "0.0.0.0",
+          "port": 4300,
+          "allowedHosts": ["winnovation.wouterhomelab.com", ".ngrok-free.dev"],
+          "hmr": false,
+          "liveReload": false
         }
       },
       "defaultConfiguration": "development"
