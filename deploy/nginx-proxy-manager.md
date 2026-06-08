@@ -76,6 +76,13 @@ location's **Advanced** box:
 
 ```nginx
 rewrite ^/api/?(.*)$ /$1 break;
+
+# Server-Sent Events (live sync): disable buffering or the stream never flushes.
+proxy_buffering off;
+proxy_cache off;
+proxy_read_timeout 1h;
+proxy_http_version 1.1;
+proxy_set_header Connection '';
 ```
 
 Verify: `curl -X POST https://winnovation.wouterhomelab.com/api/events …` should mint an event
@@ -100,5 +107,7 @@ Verify: `curl -X POST https://winnovation.wouterhomelab.com/api/events …` shou
   production build ships no Vite dev client).
 - `/api/*` returns 200 through NPM; `curl -X POST .../api/events …` mints an event.
 - Create an event on device A, join it on device B → scores sync across devices.
+- Open DevTools → Network → filter "stream": `GET /api/events/<id>/stream` stays **pending/open**
+  (not closed after a few seconds). A score on the other device appears live without navigation.
 - Restart the sync-api container (`docker restart winnovation-sync-api`) → data persists
   (volume).
