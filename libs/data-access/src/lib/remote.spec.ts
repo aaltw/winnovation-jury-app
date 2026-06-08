@@ -50,6 +50,30 @@ describe("RemoteGateway", () => {
     await expect(gw.joinEvent("X")).rejects.toThrow();
   });
 
+  it("listEvents GETs /events and returns the array with project counts", async () => {
+    const { impl, calls } = fakeFetch(() =>
+      json([{ id: "e1", name: "W", date: "2026-06-05", eventCode: "ABC123", projectCount: 3 }]),
+    );
+    const gw = new RemoteGateway("/api", impl);
+    const out = await gw.listEvents();
+    expect(out).toEqual([
+      { id: "e1", name: "W", date: "2026-06-05", eventCode: "ABC123", projectCount: 3 },
+    ]);
+    expect(calls[0].url).toBe("/api/events");
+  });
+
+  it("openChangeStream opens an EventSource at the stream URL via the injected factory", () => {
+    let url = "";
+    const fakeEs = { onopen: null, onmessage: null, onerror: null, close() {} };
+    const gw = new RemoteGateway("/api", undefined, (u: string) => {
+      url = u;
+      return fakeEs as never;
+    });
+    const handle = gw.openChangeStream("e1", "ABC123", () => {});
+    expect(url).toBe("/api/events/e1/stream?code=ABC123");
+    handle.close();
+  });
+
   it("transportFor sends the x-event-code header on push and pull", async () => {
     const { impl, calls } = fakeFetch((c) =>
       c.init?.method === "POST"

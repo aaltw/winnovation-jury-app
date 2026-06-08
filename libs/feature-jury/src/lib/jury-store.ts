@@ -1,9 +1,12 @@
 import { Injectable, signal } from "@angular/core";
 import {
+  type ChangeStreamHandle,
+  type ConnectionState,
   JuryDb,
   JuryService,
   putPhoto,
   type Remote,
+  type RemoteEventListItem,
   RemoteGateway,
   SyncClient,
 } from "@winnovation/data-access";
@@ -47,6 +50,38 @@ export class JuryStore {
     this.clock = fn;
   }
 
+  private storage: Storage | null = typeof localStorage !== "undefined" ? localStorage : null;
+  setStorageForTest(s: Storage): void {
+    this.storage = s;
+  }
+  private static readonly SESSION_KEY = "winnovation:session";
+
+  private persistSession(eventId: string, judge: JudgeSlot): void {
+    this.storage?.setItem(JuryStore.SESSION_KEY, JSON.stringify({ eventId, judge }));
+  }
+  private clearSession(): void {
+    this.storage?.removeItem(JuryStore.SESSION_KEY);
+  }
+
+  async restoreSession(): Promise<boolean> {
+    const raw = this.storage?.getItem(JuryStore.SESSION_KEY);
+    if (!raw) return false;
+    let parsed: { eventId?: string; judge?: JudgeSlot };
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return false;
+    }
+    if (!parsed.eventId) return false;
+    const found = await this.db.events.get(parsed.eventId);
+    if (!found) return false;
+    this.event.set(found);
+    this.judge.set(parsed.judge === "B" ? "B" : "A");
+    this.attachSync(found);
+    await this.refreshDeelnemers();
+    return true;
+  }
+
   /** Best-effort mirror to the sync-api. Null until an event is created/joined online. */
   private remote: Remote = new RemoteGateway("/api");
   private sync: SyncClient | null = null;
@@ -76,6 +111,19 @@ export class JuryStore {
   readonly driftFlags = signal<DriftFlag[]>([]);
   readonly driftItems = signal<DriftListItem[]>([]);
   readonly scores = signal<Score[]>([]);
+  readonly events = signal<RemoteEventListItem[]>([]);
+  readonly revision = signal(0);
+  readonly connection = signal<ConnectionState>("offline");
+
+  private stream: ChangeStreamHandle | null = null;
+  private liveTick: Promise<void> = Promise.resolve();
+  settleLiveForTest(): Promise<void> {
+    return this.liveTick;
+  }
+
+  async refreshEventList(): Promise<void> {
+    this.events.set(await this.remote.listEvents().catch(() => []));
+  }
 
   setJudge(slot: JudgeSlot): void {
     this.judge.set(slot);
@@ -89,10 +137,13 @@ export class JuryStore {
       await this.db.events.put(event);
       this.event.set(event);
       this.attachSync(event);
+      this.persistSession(event.id, this.judge());
     } catch {
       // Offline: a local-only event (random id+code, no cross-device sync).
       this.sync = null;
-      this.event.set(await this.service.createEvent({ name, date }));
+      const local = await this.service.createEvent({ name, date });
+      this.event.set(local);
+      this.persistSession(local.id, this.judge());
     }
   }
 
@@ -108,6 +159,7 @@ export class JuryStore {
     }
     this.event.set(found);
     this.judge.set(slot);
+    this.persistSession(found.id, slot);
     this.attachSync(found);
     await this.refreshDeelnemers(); // pulls remote rows, then loads from local
     return true;
@@ -262,6 +314,36 @@ export class JuryStore {
       this.remote.transportFor(() => event.eventCode),
       event.id,
     );
+    this.openStream(event);
+  }
+
+  private openStream(event: JuryEvent): void {
+    this.stream?.close();
+    this.connection.set("connecting");
+    this.stream = this.remote.openChangeStream(
+      event.id,
+      event.eventCode,
+      () => {
+        this.liveTick = this.onRemoteChange();
+      },
+      (s) => this.connection.set(s),
+    );
+  }
+
+  private async onRemoteChange(): Promise<void> {
+    await this.refreshDeelnemers(); // pulls + reloads roster + scores
+    await this.refreshDrift();
+    this.revision.update((n) => n + 1);
+  }
+
+  leaveEvent(): void {
+    this.stream?.close();
+    this.stream = null;
+    this.connection.set("offline");
+    this.clearSession();
+    this.event.set(null);
+    this.deelnemers.set([]);
+    this.scores.set([]);
   }
 
   /** Pull remote changes into the local cache. Best-effort: silent when offline. */

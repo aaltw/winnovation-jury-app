@@ -39,6 +39,24 @@ const flat = (v: ScoreValue): Record<Criterion, ScoreValue> => ({
   impact: v,
 });
 
+function memoryStorage(): Storage {
+  const m = new Map<string, string>();
+  return {
+    getItem: (k) => m.get(k) ?? null,
+    setItem: (k, v) => {
+      m.set(k, String(v));
+    },
+    removeItem: (k) => {
+      m.delete(k);
+    },
+    clear: () => m.clear(),
+    key: (i) => [...m.keys()][i] ?? null,
+    get length() {
+      return m.size;
+    },
+  } as Storage;
+}
+
 /** A remote that always fails — the local-only / offline path. */
 const offlineRemote: Remote = {
   createEvent: () => Promise.reject(new Error("offline")),
@@ -47,6 +65,8 @@ const offlineRemote: Remote = {
     post: () => Promise.reject(new Error("offline")),
     get: () => Promise.reject(new Error("offline")),
   }),
+  listEvents: () => Promise.resolve([]),
+  openChangeStream: () => ({ close() {} }),
 };
 
 function lww<T extends { updatedAt?: number }>(map: Map<string, T>, key: string, row: T): void {
@@ -77,6 +97,17 @@ function fakeBackend() {
       return Promise.resolve({ id: info.id, eventCode: info.eventCode });
     },
     joinEvent: (code) => Promise.resolve(events.get(code) ?? null),
+    listEvents: () =>
+      Promise.resolve(
+        [...events.values()].map((e) => ({
+          id: e.id,
+          name: e.name,
+          date: e.date,
+          eventCode: e.eventCode,
+          projectCount: [...deelnemers.values()].filter((d) => d.eventId === e.id).length,
+        })),
+      ),
+    openChangeStream: () => ({ close() {} }),
     transportFor: (code) => {
       const eventId = () => {
         const info = events.get(code());
@@ -255,6 +286,82 @@ describe("JuryStore sync", () => {
   afterEach(async () => {
     for (const s of created) await s.resetForTest();
     created.length = 0;
+  });
+
+  it("refreshEventList loads the server's event listing", async () => {
+    const backend = fakeBackend();
+    const store = freshStore(backend.remote, 1000);
+    await store.createEvent("Winnovation", "2026-06-05");
+    await store.refreshEventList();
+    expect(store.events().map((e) => e.name)).toContain("Winnovation");
+  });
+
+  it("persists the session on create and restores it into a fresh store on the same device", async () => {
+    const backend = fakeBackend();
+    const dbName = `restore-test-${++dbSeq}`;
+    const storage = memoryStorage();
+
+    const first = new JuryStore();
+    first.setDbForTest(new JuryDb(dbName));
+    first.setRemoteForTest(backend.remote);
+    first.setStorageForTest(storage);
+    let t = 5000;
+    first.setClockForTest(() => ++t);
+    created.push(first);
+    await first.createEvent("Winnovation", "2026-06-05");
+    const code = first.event()?.eventCode;
+
+    // A brand-new store = a fresh page load. Same db name + same storage = same device.
+    const second = new JuryStore();
+    second.setDbForTest(new JuryDb(dbName));
+    second.setRemoteForTest(backend.remote);
+    second.setStorageForTest(storage);
+    created.push(second);
+
+    expect(await second.restoreSession()).toBe(true);
+    expect(second.event()?.eventCode).toBe(code);
+
+    // No persisted session → restore is a no-op.
+    const fresh = new JuryStore();
+    fresh.setDbForTest(new JuryDb(`empty-${++dbSeq}`));
+    fresh.setRemoteForTest(backend.remote);
+    fresh.setStorageForTest(memoryStorage());
+    created.push(fresh);
+    expect(await fresh.restoreSession()).toBe(false);
+  });
+
+  it("reacts to a stream notification by pulling and bumping revision", async () => {
+    const backend = fakeBackend();
+    let notify: () => void = () => {};
+    // Listener device: same backend, but its stream is controllable.
+    const liveRemote: Remote = {
+      ...backend.remote,
+      openChangeStream: (_id, _code, onChange) => {
+        notify = onChange;
+        return { close() {} };
+      },
+    };
+
+    const deviceA = freshStore(backend.remote, 1_000); // writer
+    const deviceB = freshStore(liveRemote, 100_000); // listener
+
+    await deviceA.createEvent("W", "2026-06-05");
+    deviceA.setJudge("A");
+    const code = deviceA.event()?.eventCode ?? "";
+    expect(await deviceB.joinEvent(code, "B")).toBe(true);
+
+    const before = deviceB.revision();
+
+    // A writes and pushes to the shared backend.
+    await deviceA.captureDeelnemer(capture("1", flat(5)));
+    await deviceA.settleSyncForTest();
+
+    // Server would emit SSE → simulate it. B pulls.
+    notify();
+    await deviceB.settleLiveForTest();
+
+    expect(deviceB.deelnemers().map((d) => d.standNr)).toContain("1");
+    expect(deviceB.revision()).toBeGreaterThan(before);
   });
 
   it("createEvent registers with the server and pushes captured rows", async () => {

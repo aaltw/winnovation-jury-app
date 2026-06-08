@@ -1,3 +1,4 @@
+export * from "./lib/change-stream";
 export * from "./lib/db";
 export * from "./lib/deelnemers.repo";
 export * from "./lib/events.repo";

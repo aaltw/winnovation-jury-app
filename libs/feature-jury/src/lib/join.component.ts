@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, type OnInit, inject, signal } from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import { Router } from "@angular/router";
 import type { JudgeSlot } from "@winnovation/domain";
@@ -43,6 +43,29 @@ const STEPS: ReadonlyArray<readonly [string, string, string]> = [
             Geen account. Voer de eventcode in en kies je plek als jurylid.
           </p>
         </div>
+
+        @if (store.events().length) {
+          <div style="margin-top:32px">
+            <label class="wv-label" style="color:rgba(255,255,255,.55)">Kies een event</label>
+            <div style="display:flex;flex-direction:column;gap:8px;margin-top:6px">
+              @for (ev of store.events(); track ev.id) {
+                <button
+                  type="button"
+                  (click)="chooseEvent(ev.eventCode)"
+                  [style.border]="
+                    code === ev.eventCode ? '1.5px solid var(--brand)' : '1.5px solid rgba(255,255,255,.16)'
+                  "
+                  style="padding:13px 14px;border-radius:14px;background:rgba(255,255,255,.05);color:#fff;text-align:left;cursor:pointer"
+                >
+                  <div style="font-weight:700;font-size:15px">{{ ev.name }}</div>
+                  <div style="font-size:12px;color:rgba(255,255,255,.5);margin-top:2px">
+                    {{ ev.eventCode }} · {{ ev.projectCount }} projecten
+                  </div>
+                </button>
+              }
+            </div>
+          </div>
+        }
 
         <div style="margin-top:32px">
           <label class="wv-label" style="color:rgba(255,255,255,.55)">Eventcode</label>
@@ -145,8 +168,8 @@ const STEPS: ReadonlyArray<readonly [string, string, string]> = [
     </div>
   `,
 })
-export class JoinComponent {
-  private readonly store = inject(JuryStore);
+export class JoinComponent implements OnInit {
+  protected readonly store = inject(JuryStore);
   private readonly router = inject(Router);
 
   protected readonly judge = this.store.judge;
@@ -156,6 +179,20 @@ export class JoinComponent {
   protected newName = "";
   protected readonly error = signal(false);
   protected readonly creating = signal(false);
+
+  async ngOnInit(): Promise<void> {
+    // Session was restored by the app initializer → skip the join screen.
+    if (this.store.event()) {
+      await this.router.navigate(["/home"]);
+      return;
+    }
+    await this.store.refreshEventList();
+  }
+
+  protected chooseEvent(code: string): void {
+    this.code = code;
+    this.error.set(false);
+  }
 
   protected pick(slot: JudgeSlot): void {
     this.store.setJudge(slot);

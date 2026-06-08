@@ -1,6 +1,12 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from "@angular/core";
 import { Router } from "@angular/router";
-import { IconComponent, SyncComponent, DeelnemerCardComponent, fmtStand } from "@winnovation/ui";
+import {
+  IconComponent,
+  SyncComponent,
+  DeelnemerCardComponent,
+  fmtStand,
+  type SyncState,
+} from "@winnovation/ui";
 import { JuryStore } from "./jury-store";
 
 @Component({
@@ -22,10 +28,17 @@ import { JuryStore } from "./jury-store";
               <h2 style="font-size:20px;margin:0">Winnovation</h2>
             </div>
             <div class="sub" style="margin-top:2px">
-              Eventcode {{ store.event()?.eventCode ?? "—" }} · Jurylid {{ store.judge() }}
+              <button
+                type="button"
+                (click)="copyCode()"
+                style="background:none;border:none;padding:0;color:inherit;font:inherit;cursor:pointer"
+              >
+                Eventcode {{ store.event()?.eventCode ?? "—" }}{{ copied() ? " ✓ gekopieerd" : "" }}
+              </button>
+              · Jurylid {{ store.judge() }}
             </div>
           </div>
-          <wn-sync state="synced" />
+          <wn-sync [state]="syncState()" />
         </div>
 
         <div class="wv-pad">
@@ -178,6 +191,31 @@ export class EventHomeComponent {
   ]);
 
   private readonly palette = ["#4B3BF5", "#FF5A3C", "#00A7C4", "#06BE7E", "#F5A300", "#8A5BE0"];
+
+  protected readonly copied = signal(false);
+
+  protected readonly syncState = computed<SyncState>(() => {
+    switch (this.store.connection()) {
+      case "live":
+        return "synced";
+      case "connecting":
+        return "syncing";
+      default:
+        return "offline";
+    }
+  });
+
+  protected async copyCode(): Promise<void> {
+    const code = this.store.event()?.eventCode;
+    if (!code) return;
+    try {
+      await navigator.clipboard.writeText(code);
+      this.copied.set(true);
+      setTimeout(() => this.copied.set(false), 1500);
+    } catch {
+      // Clipboard unavailable (insecure context) — ignore.
+    }
+  }
 
   async ngOnInit(): Promise<void> {
     await this.store.refreshDeelnemers();

@@ -1,3 +1,9 @@
+import {
+  ChangeStream,
+  type ChangeStreamHandle,
+  type ConnectionState,
+  type EventSourceFactory,
+} from "./change-stream";
 import type { Transport } from "./sync";
 
 export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
@@ -10,6 +16,15 @@ export interface RemoteEventInfo {
   name: string;
   date: string;
   eventCode: string;
+}
+
+/** One row from the server's `GET /events` listing. */
+export interface RemoteEventListItem {
+  id: string;
+  name: string;
+  date: string;
+  eventCode: string;
+  projectCount: number;
 }
 
 type ChangeResponse = { deelnemers: unknown[]; scores: unknown[]; captureMeta: unknown[] };
@@ -48,6 +63,13 @@ export interface Remote {
   createEvent(name: string, date: string): Promise<{ id: string; eventCode: string }>;
   joinEvent(code: string): Promise<RemoteEventInfo | null>;
   transportFor(code: () => string): Transport;
+  listEvents(): Promise<RemoteEventListItem[]>;
+  openChangeStream(
+    eventId: string,
+    code: string,
+    onChange: () => void,
+    onState?: (s: ConnectionState) => void,
+  ): ChangeStreamHandle;
 }
 
 /** Talks to the Hono sync-api (same-origin under `/api` in the browser). */
@@ -55,6 +77,7 @@ export class RemoteGateway implements Remote {
   constructor(
     private readonly base: string,
     private readonly fetchImpl: FetchLike = defaultFetch,
+    private readonly eventSourceFactory?: EventSourceFactory,
   ) {}
 
   async createEvent(name: string, date: string): Promise<{ id: string; eventCode: string }> {
@@ -84,5 +107,20 @@ export class RemoteGateway implements Remote {
 
   transportFor(code: () => string): Transport {
     return new HttpTransport(this.base, code, this.fetchImpl);
+  }
+
+  async listEvents(): Promise<RemoteEventListItem[]> {
+    const res = await this.fetchImpl(`${this.base}/events`);
+    if (!res.ok) throw new Error(`list events → ${res.status}`);
+    return res.json() as Promise<RemoteEventListItem[]>;
+  }
+
+  openChangeStream(
+    eventId: string,
+    code: string,
+    onChange: () => void,
+    onState?: (s: ConnectionState) => void,
+  ): ChangeStreamHandle {
+    return new ChangeStream(this.base, eventId, code, onChange, this.eventSourceFactory, onState);
   }
 }
