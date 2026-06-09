@@ -149,28 +149,54 @@ const LABELS: Record<Criterion, string> = {
               />
 
               <div style="display:grid;gap:8px;margin-top:6px">
-                @if (anchors()?.above && anchors()?.below) {
+                @if (anchors(); as a) {
+                  @if (!a.above && !a.below) {
+                    <!-- First/only project on this criterion: nothing to compare yet. -->
+                    <button
+                      class="wv-btn"
+                      [style.background]="color(t.criterion)"
+                      [style.box-shadow]="'0 6px 16px ' + color(t.criterion) + '44'"
+                      style="color:#fff"
+                      (click)="decide('tussen')"
+                    >
+                      <wn-icon name="check" [size]="18" />
+                      Plaatsen
+                    </button>
+                  } @else {
+                    @if (a.above && a.below) {
+                      <button
+                        class="wv-btn"
+                        [style.background]="color(t.criterion)"
+                        [style.box-shadow]="'0 6px 16px ' + color(t.criterion) + '44'"
+                        style="color:#fff"
+                        (click)="decide('tussen')"
+                      >
+                        <wn-icon name="arrowRight" [size]="18" />
+                        Hier tussen plaatsen
+                      </button>
+                    }
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                      <button class="wv-btn wv-btn-ghost" (click)="decide('boven')">
+                        <wn-icon name="chevUp" [size]="18" />
+                        {{ a.above ? "Hoger" : "Bovenaan" }}
+                      </button>
+                      <button class="wv-btn wv-btn-ghost" (click)="decide('onder')">
+                        <wn-icon name="chevDown" [size]="18" />
+                        {{ a.below ? "Lager" : "Onderaan" }}
+                      </button>
+                    </div>
+                  }
+                }
+                @if (history().length) {
                   <button
-                    class="wv-btn"
-                    [style.background]="color(t.criterion)"
-                    [style.box-shadow]="'0 6px 16px ' + color(t.criterion) + '44'"
-                    style="color:#fff"
-                    (click)="decide('tussen')"
+                    class="wv-btn-link"
+                    (click)="back()"
+                    style="justify-self:center;margin-top:2px;display:inline-flex;align-items:center;gap:4px"
                   >
-                    <wn-icon name="arrowRight" [size]="18" />
-                    Hier tussen plaatsen
+                    <wn-icon name="chevLeft" [size]="15" />
+                    Vorige stap
                   </button>
                 }
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-                  <button class="wv-btn wv-btn-ghost" (click)="decide('boven')">
-                    <wn-icon name="chevUp" [size]="18" />
-                    {{ anchors()?.above ? "Hoger" : "Bovenaan" }}
-                  </button>
-                  <button class="wv-btn wv-btn-ghost" (click)="decide('onder')">
-                    <wn-icon name="chevDown" [size]="18" />
-                    {{ anchors()?.below ? "Lager" : "Onderaan" }}
-                  </button>
-                </div>
               </div>
             </div>
           </div>
@@ -199,6 +225,12 @@ const LABELS: Record<Criterion, string> = {
           </div>
         </div>
         <div class="wv-dock bordered">
+          @if (history().length) {
+            <button class="wv-btn wv-btn-ghost" (click)="back()">
+              <wn-icon name="chevLeft" [size]="19" />
+              Vorige stap herzien
+            </button>
+          }
           <button class="wv-btn wv-btn-primary" (click)="go('/review')">
             <wn-icon name="list" [size]="19" />
             Naar nakijken
@@ -222,6 +254,8 @@ export class CompareComponent {
   protected readonly queue = signal<Task[]>([]);
   protected readonly current = signal<Task | null>(null);
   protected readonly anchors = signal<Anchors | null>(null);
+  // Decided tasks, newest last — lets the juror step back and re-place.
+  protected readonly history = signal<Task[]>([]);
   private readonly keywords = signal<Record<string, string>>({});
 
   protected readonly remaining = computed(() => {
@@ -271,11 +305,32 @@ export class CompareComponent {
     const [next, ...rest] = this.queue();
     this.queue.set(rest);
     this.current.set(next ?? null);
-    if (next) {
-      this.anchors.set(bracketingAnchors(await this.store.placedFor(next.criterion), next.value));
-    } else {
+    await this.setAnchors(next ?? null);
+  }
+
+  /** Anchors for `task`, excluding its own (possibly already-placed) row so a
+   * re-visited placement compares against the *other* projects, not itself. */
+  private async setAnchors(task: Task | null): Promise<void> {
+    if (!task) {
       this.anchors.set(null);
+      return;
     }
+    const others = (await this.store.placedFor(task.criterion)).filter(
+      (p) => p.standNr !== task.standNr,
+    );
+    this.anchors.set(bracketingAnchors(others, task.value));
+  }
+
+  /** Step back to the previously decided task and re-open it for placement. */
+  protected async back(): Promise<void> {
+    const hist = this.history();
+    if (!hist.length) return;
+    const prev = hist[hist.length - 1];
+    this.history.set(hist.slice(0, -1));
+    const cur = this.current();
+    this.queue.update((q) => (cur ? [cur, ...q] : q));
+    this.current.set(prev);
+    await this.setAnchors(prev);
   }
 
   protected async decide(where: "boven" | "tussen" | "onder"): Promise<void> {
@@ -295,6 +350,7 @@ export class CompareComponent {
             ? a.index + 1
             : a.index;
     await this.store.applyPlacement(t.criterion, t.standNr, index);
+    this.history.update((h) => [...h, t]);
     await this.advance();
   }
 
