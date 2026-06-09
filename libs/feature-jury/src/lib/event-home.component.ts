@@ -44,7 +44,12 @@ import { JuryStore } from "./jury-store";
         <div class="wv-pad">
           <div class="wv-progress" style="margin-bottom:12px">
             <div class="wv-stat">
-              <div class="big">{{ scored() }}</div>
+              <div class="big">
+                {{ scored() }}@if (totalBooths() > scored()) {<span
+                  style="font-size:.6em;color:var(--muted);font-weight:700"
+                  >/{{ totalBooths() }}</span
+                >}
+              </div>
               <div class="lbl">Gescoord</div>
             </div>
             <div class="wv-stat">
@@ -123,18 +128,24 @@ import { JuryStore } from "./jury-store";
                   [projectgroep]="d.projectgroep"
                   [keyword]="keywords()[d.standNr] ?? ''"
                   [color]="colorFor(d.standNr)"
-                  [drift]="driftSet().has(d.standNr)"
+                  [drift]="scoredByMe(d.standNr) && driftSet().has(d.standNr)"
                   [tappable]="true"
-                  (click)="go('/review')"
+                  (click)="
+                    scoredByMe(d.standNr) ? go('/review') : scoreBooth(d.standNr, d.projectgroep)
+                  "
                 >
-                  <span
-                    slot="trailing"
-                    [class]="
-                      store.isPlaced(d.standNr) ? 'wv-chip wv-chip-mint' : 'wv-chip wv-chip-brand'
-                    "
-                  >
-                    {{ store.isPlaced(d.standNr) ? "Geplaatst" : "Te plaatsen" }}
-                  </span>
+                  @if (!scoredByMe(d.standNr)) {
+                    <span slot="trailing" class="wv-chip wv-chip-line">Nog niet door jou</span>
+                  } @else {
+                    <span
+                      slot="trailing"
+                      [class]="
+                        store.isPlaced(d.standNr) ? 'wv-chip wv-chip-mint' : 'wv-chip wv-chip-brand'
+                      "
+                    >
+                      {{ store.isPlaced(d.standNr) ? "Geplaatst" : "Te plaatsen" }}
+                    </span>
+                  }
                 </wn-deelnemer-card>
               }
             </div>
@@ -161,7 +172,13 @@ export class EventHomeComponent {
   private readonly router = inject(Router);
 
   protected readonly keywords = signal<Record<string, string>>({});
-  protected readonly scored = computed(() => this.store.deelnemers().length);
+  // Booths the *current* juror has scored (judge-scoped) — distinct from the
+  // shared booth roster, which syncs across both jurors.
+  protected readonly myStandNrs = computed(
+    () => new Set(this.store.scores().map((s) => s.standNr)),
+  );
+  protected readonly scored = computed(() => this.myStandNrs().size);
+  protected readonly totalBooths = computed(() => this.store.deelnemers().length);
   protected readonly recent = computed(() => [...this.store.deelnemers()].reverse());
   protected readonly driftSet = computed(
     () => new Set(this.store.driftItems().map((d) => d.standNr)),
@@ -230,6 +247,16 @@ export class EventHomeComponent {
   }
 
   protected fmtStand = fmtStand;
+
+  protected scoredByMe(standNr: string): boolean {
+    return this.myStandNrs().has(standNr);
+  }
+
+  /** Open the capture screen for a booth the other juror entered, prefilled so
+   * this juror adds their own scores without clobbering the shared metadata. */
+  protected scoreBooth(standNr: string, projectgroep: string): void {
+    void this.router.navigate(["/stand"], { queryParams: { standNr, projectgroep } });
+  }
 
   protected pct(n: number): string {
     const total = this.scored();

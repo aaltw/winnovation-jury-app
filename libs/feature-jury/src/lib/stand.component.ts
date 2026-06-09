@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from "@angular/core";
 import { FormsModule } from "@angular/forms";
-import { Router } from "@angular/router";
+import { ActivatedRoute, Router } from "@angular/router";
 import { CRITERIA, type Criterion, type ScoreValue } from "@winnovation/domain";
 import {
   AppBarComponent,
@@ -193,6 +193,16 @@ export class StandComponent {
   protected readonly vervolg = signal(false);
   protected readonly photoRef = signal<string | null>(null);
   protected readonly scores = signal<Partial<Record<Criterion, ScoreValue>>>({});
+
+  constructor() {
+    // Prefilled when arriving from a booth the other juror already entered, so
+    // this juror keeps the shared standNr/projectgroep and just adds own scores.
+    const qp = inject(ActivatedRoute).snapshot.queryParamMap;
+    const std = qp.get("standNr");
+    const pg = qp.get("projectgroep");
+    if (std) this.standNr.set(std.replace(/\D/g, "").slice(0, 2));
+    if (pg) this.projectgroep.set(pg);
+  }
 
   protected readonly scoredCount = computed(
     () => CRITERIA.filter((c) => this.scores()[c] != null).length,
