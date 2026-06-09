@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, effect, inject, signal } from "@angular/core";
 import { Router } from "@angular/router";
 import { CRITERIA, type Criterion, type JudgeSlot, type Score } from "@winnovation/domain";
 import {
@@ -203,7 +203,15 @@ export class ReconcileComponent {
   protected fmt = fmtStand;
   private readonly palette = ["#4B3BF5", "#FF5A3C", "#00A7C4", "#06BE7E", "#F5A300", "#8A5BE0"];
 
-  async ngOnInit(): Promise<void> {
+  constructor() {
+    // Re-derive the merged ranking whenever a live remote change bumps the revision.
+    effect(() => {
+      this.store.revision();
+      void this.load();
+    });
+  }
+
+  private async load(): Promise<void> {
     await this.store.refreshDeelnemers();
     const byStand = new Map(this.store.deelnemers().map((d) => [d.standNr, d]));
     const keywords = new Map(
@@ -222,6 +230,7 @@ export class ReconcileComponent {
     ]);
     const standsA = new Set(scoresA.map((s) => s.standNr));
     const standsB = new Set(scoresB.map((s) => s.standNr));
+    this.valueMap = new Map<string, number>();
     for (const s of [
       ...scoresA.map((s) => ["A", s] as const),
       ...scoresB.map((s) => ["B", s] as const),

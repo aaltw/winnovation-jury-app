@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, effect, inject, signal } from "@angular/core";
 import { Router } from "@angular/router";
 import { CRITERIA, type Criterion, type FinalRow, toCsv } from "@winnovation/domain";
 import {
@@ -202,7 +202,15 @@ export class ResultComponent {
   protected color = criterionColor;
   private readonly palette = ["#4B3BF5", "#FF5A3C", "#00A7C4", "#06BE7E", "#F5A300", "#8A5BE0"];
 
-  async ngOnInit(): Promise<void> {
+  constructor() {
+    // Re-derive the final ranking whenever a live remote change bumps the revision.
+    effect(() => {
+      this.store.revision();
+      void this.load();
+    });
+  }
+
+  private async load(): Promise<void> {
     await this.store.refreshDeelnemers();
     const byStand = new Map(this.store.deelnemers().map((d) => [d.standNr, d]));
     const keywords = new Map(
