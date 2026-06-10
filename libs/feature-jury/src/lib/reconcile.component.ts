@@ -1,6 +1,19 @@
-import { ChangeDetectionStrategy, Component, effect, inject, signal } from "@angular/core";
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  inject,
+  signal,
+} from "@angular/core";
 import { Router } from "@angular/router";
-import { CRITERIA, type Criterion, type JudgeSlot, type Score } from "@winnovation/domain";
+import {
+  CRITERIA,
+  type Criterion,
+  type JudgeSlot,
+  type Score,
+  type ScoreValue,
+} from "@winnovation/domain";
 import {
   AppBarComponent,
   IconComponent,
@@ -41,7 +54,7 @@ interface IncompleteRow {
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="wv-screen">
-      <wn-app-bar title="Verzoenen" sub="jij + jurylid B">
+      <wn-app-bar title="Afstemmen" [sub]="'jij + jurylid ' + other()">
         <button slot="left" class="wv-appbar-btn" (click)="go('/home')">
           <wn-icon name="chevLeft" [size]="20" />
         </button>
@@ -51,8 +64,10 @@ interface IncompleteRow {
       <div class="wv-scroll">
         <div class="wv-pad" style="padding-top:4px">
           <p style="font-size:13px;color:var(--muted);margin:0 0 14px;line-height:1.5">
-            Samengevoegde ranglijst. <b style="color:var(--ink)">Grootste meningsverschillen eerst</b>
-            — bespreek die en leg de eindstand vast.
+            Doe dit samen, aan het eind van de dag.
+            <b style="color:var(--ink)">Grootste meningsverschillen eerst</b> — open een project,
+            bespreek het verschil en pas je eigen cijfers aan met − en +. De lijst werkt live bij op
+            beide telefoons. Eens? Leg dan de eindstand vast.
           </p>
 
           <div class="wv-list">
@@ -86,11 +101,11 @@ interface IncompleteRow {
                     <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
                       <span style="font-size:11px;font-weight:700;color:var(--brand-ink)">Jij</span>
                       <div class="wv-bar" style="flex:1;max-width:80px;height:6px">
-                        <span [style.width]="barW(r.ptsA)" style="background:var(--brand)"></span>
+                        <span [style.width]="barW(mine(r))" style="background:var(--brand)"></span>
                       </div>
-                      <span style="font-size:11px;font-weight:700;color:var(--coral)">B</span>
+                      <span style="font-size:11px;font-weight:700;color:var(--coral)">{{ other() }}</span>
                       <div class="wv-bar" style="flex:1;max-width:80px;height:6px">
-                        <span [style.width]="barW(r.ptsB)" style="background:var(--coral)"></span>
+                        <span [style.width]="barW(theirs(r))" style="background:var(--coral)"></span>
                       </div>
                     </div>
                   </div>
@@ -120,7 +135,7 @@ interface IncompleteRow {
                       >
                       <span
                         style="font-size:10.5px;font-weight:800;color:var(--coral);text-transform:uppercase"
-                        >B</span
+                        >{{ other() }}</span
                       >
                       @for (c of criteria; track c) {
                         <span style="display:flex;align-items:center;gap:7px;font-weight:600">
@@ -130,13 +145,31 @@ interface IncompleteRow {
                           ></span>
                           {{ labels[c] }}
                         </span>
-                        <span
-                          [style.color]="color(c)"
-                          style="font-weight:800;font-family:var(--font-display)"
-                          >{{ val(r.standNr, c, "A") }}</span
-                        >
+                        <span style="display:inline-flex;align-items:center;gap:6px">
+                          <button
+                            type="button"
+                            (click)="bump(r.standNr, c, -1)"
+                            [disabled]="numVal(r.standNr, c, me()) <= 1"
+                            style="width:26px;height:26px;border-radius:8px;border:1px solid var(--line-2);background:#fff;color:var(--ink-2);font-weight:800;cursor:pointer;display:grid;place-items:center"
+                          >
+                            −
+                          </button>
+                          <span
+                            [style.color]="color(c)"
+                            style="font-weight:800;font-family:var(--font-display);min-width:14px;text-align:center"
+                            >{{ val(r.standNr, c, me()) }}</span
+                          >
+                          <button
+                            type="button"
+                            (click)="bump(r.standNr, c, 1)"
+                            [disabled]="numVal(r.standNr, c, me()) >= 5"
+                            style="width:26px;height:26px;border-radius:8px;border:1px solid var(--line-2);background:#fff;color:var(--ink-2);font-weight:800;cursor:pointer;display:grid;place-items:center"
+                          >
+                            +
+                          </button>
+                        </span>
                         <span style="font-weight:800;font-family:var(--font-display);color:var(--ink-2)">{{
-                          val(r.standNr, c, "B")
+                          val(r.standNr, c, other())
                         }}</span>
                       }
                     </div>
@@ -198,6 +231,9 @@ export class ReconcileComponent {
   protected readonly incomplete = signal<IncompleteRow[]>([]);
   protected readonly open = signal<string | null>(null);
   private valueMap = new Map<string, number>();
+
+  protected readonly me = this.store.judge;
+  protected readonly other = computed<JudgeSlot>(() => (this.me() === "A" ? "B" : "A"));
 
   protected color = criterionColor;
   protected fmt = fmtStand;
@@ -279,6 +315,27 @@ export class ReconcileComponent {
   protected val(standNr: string, criterion: Criterion, judge: JudgeSlot): string {
     const v = this.valueMap.get(`${judge}|${standNr}|${criterion}`);
     return v == null ? "—" : String(v);
+  }
+
+  protected mine(r: Row): number {
+    return this.me() === "A" ? r.ptsA : r.ptsB;
+  }
+
+  protected theirs(r: Row): number {
+    return this.me() === "A" ? r.ptsB : r.ptsA;
+  }
+
+  protected numVal(standNr: string, criterion: Criterion, judge: JudgeSlot): number {
+    return this.valueMap.get(`${judge}|${standNr}|${criterion}`) ?? 0;
+  }
+
+  protected async bump(standNr: string, criterion: Criterion, delta: number): Promise<void> {
+    const cur = this.numVal(standNr, criterion, this.me());
+    if (cur === 0) return;
+    const next = Math.min(5, Math.max(1, cur + delta));
+    if (next === cur) return;
+    await this.store.updateScoreValue(criterion, standNr, next as ScoreValue);
+    await this.load();
   }
 
   protected colorForStand(standNr: string): string {

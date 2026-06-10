@@ -8,7 +8,7 @@ import { JuryStore } from "./jury-store";
 const STEPS: ReadonlyArray<readonly [string, string, string]> = [
   ["camera", "Vastleggen", "Scoor elk project in seconden, aan de stand."],
   ["scale", "Vergelijken", "Plaats het t.o.v. projecten die je al zag."],
-  ["handshake", "Verzoenen", "Leg samen de eerlijke eindstand vast."],
+  ["handshake", "Afstemmen", "Bespreek verschillen en leg samen de eindstand vast."],
 ];
 
 @Component({

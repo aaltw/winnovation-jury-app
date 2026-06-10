@@ -208,8 +208,8 @@ export class EventHomeComponent {
     },
     {
       icon: "handshake",
-      title: "Verzoenen",
-      sub: "met jurylid B",
+      title: "Afstemmen",
+      sub: `verschillen met jurylid ${this.store.judge() === "A" ? "B" : "A"}`,
       route: "/reconcile",
       color: "var(--coral)",
     },
