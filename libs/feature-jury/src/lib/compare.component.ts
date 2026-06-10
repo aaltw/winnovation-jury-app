@@ -219,8 +219,8 @@ const LABELS: Record<Criterion, string> = {
         <div class="wv-scroll" style="display:flex;align-items:center">
           <div style="margin:auto;width:100%">
             <wn-empty [clean]="true" title="Alles geplaatst">
-              Elk project staat op zijn plek in alle vier de criteria. Tijd om na te kijken of te
-              verzoenen.
+              Elk project staat op zijn plek in alle vier de criteria. Door naar de volgende stand,
+              of rond af vanaf home.
             </wn-empty>
           </div>
         </div>
@@ -231,14 +231,11 @@ const LABELS: Record<Criterion, string> = {
               Vorige stap herzien
             </button>
           }
-          <button class="wv-btn wv-btn-primary" (click)="go('/review')">
-            <wn-icon name="list" [size]="19" />
-            Naar nakijken
+          <button class="wv-btn wv-btn-primary" (click)="go('/stand')">
+            <wn-icon name="plus" [size]="19" />
+            Volgende deelnemer
           </button>
-          <button class="wv-btn wv-btn-ghost" (click)="go('/reconcile')">
-            <wn-icon name="handshake" [size]="19" />
-            Verzoenen met B
-          </button>
+          <button class="wv-btn wv-btn-ghost" (click)="go('/home')">Naar home</button>
         </div>
       }
     </div>
