@@ -38,7 +38,17 @@ import { JuryStore } from "./jury-store";
               · Jurylid {{ store.judge() }}
             </div>
           </div>
-          <wn-sync [state]="syncState()" />
+          <div style="display:flex;align-items:center;gap:8px">
+            <wn-sync [state]="syncState()" />
+            <button
+              type="button"
+              class="wv-appbar-btn"
+              (click)="switchSession()"
+              title="Wissel event of jurylid"
+            >
+              <wn-icon name="selector" [size]="18" />
+            </button>
+          </div>
         </div>
 
         <div class="wv-pad">
@@ -256,6 +266,14 @@ export class EventHomeComponent {
    * this juror adds their own scores without clobbering the shared metadata. */
   protected scoreBooth(standNr: string, projectgroep: string): void {
     void this.router.navigate(["/stand"], { queryParams: { standNr, projectgroep } });
+  }
+
+  /** Detach the current event/juror and return to the join picker. No data
+   * loss — everything stays in IndexedDB and on the server, so re-joining
+   * restores it. */
+  protected switchSession(): void {
+    this.store.leaveEvent();
+    void this.router.navigate(["/"]);
   }
 
   protected pct(n: number): string {
