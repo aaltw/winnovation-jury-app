@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from "@angular/core";
 import { Router } from "@angular/router";
-import { CRITERIA, type Criterion, type ScoreValue } from "@winnovation/domain";
+import { CRITERIA, type Criterion, type ScoreValue, bracketingAnchors } from "@winnovation/domain";
 import {
   AppBarComponent,
   DeelnemerCardComponent,
@@ -169,11 +169,50 @@ interface Row {
               @if (stillDrift(target)) {
                 Je cijfer en plaatsing voor
                 <b style="color:var(--ink)">{{ kw(target) || fmtStand(target) }}</b> op
-                {{ labels[criterion()] }} spreken elkaar tegen. Pas één van beide aan.
+                {{ labels[criterion()] }} spreken elkaar tegen. Wat klopt er?
               } @else {
                 Cijfer en plaatsing zijn weer met elkaar in lijn. Mooi.
               }
             </p>
+            @if (stillDrift(target)) {
+              <div style="display:grid;gap:10px;margin-bottom:14px">
+                <button
+                  class="wv-card"
+                  (click)="followPlacement(target)"
+                  style="display:flex;align-items:center;gap:12px;padding:14px;text-align:left;cursor:pointer;border:1.5px solid var(--line)"
+                >
+                  <span
+                    style="width:34px;height:34px;border-radius:10px;background:var(--brand-soft);color:var(--brand-ink);display:grid;place-items:center;flex:none"
+                  >
+                    <wn-icon name="scale" [size]="17" />
+                  </span>
+                  <span style="flex:1">
+                    <span style="display:block;font-weight:700;font-size:14px">Mijn plaatsing klopt</span>
+                    <span style="display:block;font-size:12px;color:var(--muted);margin-top:2px"
+                      >cijfer wordt {{ valueFor(target) }} → {{ suggestedValue(target) }}</span
+                    >
+                  </span>
+                </button>
+                <button
+                  class="wv-card"
+                  (click)="followScore(target)"
+                  style="display:flex;align-items:center;gap:12px;padding:14px;text-align:left;cursor:pointer;border:1.5px solid var(--line)"
+                >
+                  <span
+                    style="width:34px;height:34px;border-radius:10px;background:var(--mint-soft);color:#066b48;display:grid;place-items:center;flex:none"
+                  >
+                    <wn-icon name="check" [size]="17" />
+                  </span>
+                  <span style="flex:1">
+                    <span style="display:block;font-weight:700;font-size:14px">Mijn cijfer klopt</span>
+                    <span style="display:block;font-size:12px;color:var(--muted);margin-top:2px"
+                      >plaatsing wordt plek {{ rankFor(target) }} → {{ suggestedRank(target) }}</span
+                    >
+                  </span>
+                </button>
+              </div>
+              <div class="wv-divider-label"><span class="t">Of stel zelf bij</span><span class="ln"></span></div>
+            }
             <div class="wv-card" style="padding:16px;margin-bottom:14px">
               <wn-score-input
                 [criterion]="criterion()"
@@ -185,7 +224,7 @@ interface Row {
             </div>
             <button
               [class]="stillDrift(target) ? 'wv-btn wv-btn-ghost' : 'wv-btn wv-btn-primary'"
-              (click)="stillDrift(target) ? go('/compare') : resolve.set(null)"
+              (click)="stillDrift(target) ? replaceIn(target) : resolve.set(null)"
             >
               <wn-icon [name]="stillDrift(target) ? 'scale' : 'check'" [size]="19" />
               {{ stillDrift(target) ? "Liever herplaatsen in Vergelijken" : "Klaar" }}
@@ -294,7 +333,50 @@ export class ReviewComponent {
     await this.load();
   }
 
+  protected rankFor(standNr: string): number {
+    return this.rows().findIndex((r) => r.standNr === standNr) + 1;
+  }
+
+  /** Score that makes the current placement inversion-free: clamp between neighbours' values. */
+  protected suggestedValue(standNr: string): ScoreValue {
+    const rows = this.rows();
+    const idx = rows.findIndex((r) => r.standNr === standNr);
+    const current = rows[idx]?.value ?? 3;
+    const above = rows.slice(0, idx).map((r) => r.value);
+    const below = rows.slice(idx + 1).map((r) => r.value);
+    const hi = above.length ? Math.min(...above) : 5;
+    const lo = below.length ? Math.max(...below) : 1;
+    const v = Math.min(hi, Math.max(lo, current));
+    return Math.min(5, Math.max(1, v)) as ScoreValue;
+  }
+
+  /** 1-based rank the project lands on when re-placed to match its score. */
+  protected suggestedRank(standNr: string): number {
+    const rows = this.rows();
+    const value = rows.find((r) => r.standNr === standNr)?.value ?? 3;
+    const others = rows
+      .filter((r) => r.standNr !== standNr)
+      .map((r, i) => ({ standNr: r.standNr, value: r.value, rankPos: i + 1 }));
+    return bracketingAnchors(others, value).index + 1;
+  }
+
+  protected async followPlacement(standNr: string): Promise<void> {
+    await this.store.updateScoreValue(this.criterion(), standNr, this.suggestedValue(standNr));
+    await this.load();
+  }
+
+  protected async followScore(standNr: string): Promise<void> {
+    await this.store.applyPlacement(this.criterion(), standNr, this.suggestedRank(standNr) - 1);
+    await this.load();
+  }
+
   protected go(route: string): void {
     void this.router.navigate([route]);
+  }
+
+  protected replaceIn(standNr: string): void {
+    void this.router.navigate(["/compare"], {
+      queryParams: { standNr, criterion: this.criterion() },
+    });
   }
 }

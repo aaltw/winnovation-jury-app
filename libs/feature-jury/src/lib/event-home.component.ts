@@ -1,6 +1,12 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from "@angular/core";
 import { Router } from "@angular/router";
-import { IconComponent, SyncComponent, DeelnemerCardComponent, fmtStand } from "@winnovation/ui";
+import {
+  IconComponent,
+  SyncComponent,
+  DeelnemerCardComponent,
+  fmtStand,
+  type SyncState,
+} from "@winnovation/ui";
 import { JuryStore } from "./jury-store";
 
 @Component({
@@ -22,23 +28,52 @@ import { JuryStore } from "./jury-store";
               <h2 style="font-size:20px;margin:0">Winnovation</h2>
             </div>
             <div class="sub" style="margin-top:2px">
-              Eventcode {{ store.event()?.eventCode ?? "—" }} · Jurylid {{ store.judge() }}
+              <button
+                type="button"
+                (click)="copyCode()"
+                style="background:none;border:none;padding:0;color:inherit;font:inherit;cursor:pointer"
+              >
+                Eventcode {{ store.event()?.eventCode ?? "—" }}{{ copied() ? " ✓ gekopieerd" : "" }}
+              </button>
+              · Jurylid {{ store.judge() }}
             </div>
           </div>
-          <wn-sync state="synced" />
+          <div style="display:flex;align-items:center;gap:8px">
+            <wn-sync [state]="syncState()" />
+            <button
+              type="button"
+              class="wv-appbar-btn"
+              (click)="switchSession()"
+              title="Wissel event of jurylid"
+            >
+              <wn-icon name="selector" [size]="18" />
+            </button>
+          </div>
         </div>
 
         <div class="wv-pad">
           <div class="wv-progress" style="margin-bottom:12px">
             <div class="wv-stat">
-              <div class="big">{{ scored() }}</div>
+              <div class="big">
+                {{ scored() }}@if (totalBooths() > scored()) {<span
+                  style="font-size:.6em;color:var(--muted);font-weight:700"
+                  >/{{ totalBooths() }}</span
+                >}
+              </div>
               <div class="lbl">Gescoord</div>
             </div>
             <div class="wv-stat">
               <div class="big">{{ store.placedCount() }}</div>
               <div class="lbl">Geplaatst</div>
             </div>
-            <div class="wv-stat flag">
+            <div
+              class="wv-stat flag"
+              (click)="go('/review')"
+              style="cursor:pointer"
+              role="button"
+              tabindex="0"
+              (keydown.enter)="go('/review')"
+            >
               <div class="big">{{ store.driftItems().length }}</div>
               <div class="lbl">Drift-vlaggen</div>
             </div>
@@ -110,18 +145,22 @@ import { JuryStore } from "./jury-store";
                   [projectgroep]="d.projectgroep"
                   [keyword]="keywords()[d.standNr] ?? ''"
                   [color]="colorFor(d.standNr)"
-                  [drift]="driftSet().has(d.standNr)"
+                  [drift]="scoredByMe(d.standNr) && driftSet().has(d.standNr)"
                   [tappable]="true"
-                  (click)="go('/review')"
+                  (click)="scoreBooth(d.standNr, d.projectgroep)"
                 >
-                  <span
-                    slot="trailing"
-                    [class]="
-                      store.isPlaced(d.standNr) ? 'wv-chip wv-chip-mint' : 'wv-chip wv-chip-brand'
-                    "
-                  >
-                    {{ store.isPlaced(d.standNr) ? "Geplaatst" : "Te plaatsen" }}
-                  </span>
+                  @if (!scoredByMe(d.standNr)) {
+                    <span slot="trailing" class="wv-chip wv-chip-line">Nog niet door jou</span>
+                  } @else {
+                    <span
+                      slot="trailing"
+                      [class]="
+                        store.isPlaced(d.standNr) ? 'wv-chip wv-chip-mint' : 'wv-chip wv-chip-brand'
+                      "
+                    >
+                      {{ store.isPlaced(d.standNr) ? "Geplaatst" : "Te plaatsen" }}
+                    </span>
+                  }
                 </wn-deelnemer-card>
               }
             </div>
@@ -148,7 +187,13 @@ export class EventHomeComponent {
   private readonly router = inject(Router);
 
   protected readonly keywords = signal<Record<string, string>>({});
-  protected readonly scored = computed(() => this.store.deelnemers().length);
+  // Booths the *current* juror has scored (judge-scoped) — distinct from the
+  // shared booth roster, which syncs across both jurors.
+  protected readonly myStandNrs = computed(
+    () => new Set(this.store.scores().map((s) => s.standNr)),
+  );
+  protected readonly scored = computed(() => this.myStandNrs().size);
+  protected readonly totalBooths = computed(() => this.store.deelnemers().length);
   protected readonly recent = computed(() => [...this.store.deelnemers()].reverse());
   protected readonly driftSet = computed(
     () => new Set(this.store.driftItems().map((d) => d.standNr)),
@@ -170,14 +215,39 @@ export class EventHomeComponent {
     },
     {
       icon: "handshake",
-      title: "Verzoenen",
-      sub: "met jurylid B",
+      title: "Afstemmen",
+      sub: `verschillen met jurylid ${this.store.judge() === "A" ? "B" : "A"}`,
       route: "/reconcile",
       color: "var(--coral)",
     },
   ]);
 
   private readonly palette = ["#4B3BF5", "#FF5A3C", "#00A7C4", "#06BE7E", "#F5A300", "#8A5BE0"];
+
+  protected readonly copied = signal(false);
+
+  protected readonly syncState = computed<SyncState>(() => {
+    switch (this.store.connection()) {
+      case "live":
+        return "synced";
+      case "connecting":
+        return "syncing";
+      default:
+        return "offline";
+    }
+  });
+
+  protected async copyCode(): Promise<void> {
+    const code = this.store.event()?.eventCode;
+    if (!code) return;
+    try {
+      await navigator.clipboard.writeText(code);
+      this.copied.set(true);
+      setTimeout(() => this.copied.set(false), 1500);
+    } catch {
+      // Clipboard unavailable (insecure context) — ignore.
+    }
+  }
 
   async ngOnInit(): Promise<void> {
     await this.store.refreshDeelnemers();
@@ -192,6 +262,24 @@ export class EventHomeComponent {
   }
 
   protected fmtStand = fmtStand;
+
+  protected scoredByMe(standNr: string): boolean {
+    return this.myStandNrs().has(standNr);
+  }
+
+  /** Open the capture screen for a booth the other juror entered, prefilled so
+   * this juror adds their own scores without clobbering the shared metadata. */
+  protected scoreBooth(standNr: string, projectgroep: string): void {
+    void this.router.navigate(["/stand"], { queryParams: { standNr, projectgroep } });
+  }
+
+  /** Detach the current event/juror and return to the join picker. No data
+   * loss — everything stays in IndexedDB and on the server, so re-joining
+   * restores it. */
+  protected switchSession(): void {
+    this.store.leaveEvent();
+    void this.router.navigate(["/"]);
+  }
 
   protected pct(n: number): string {
     const total = this.scored();

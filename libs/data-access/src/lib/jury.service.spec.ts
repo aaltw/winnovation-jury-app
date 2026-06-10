@@ -15,6 +15,8 @@ describe("JuryService", () => {
     await db.delete();
   });
 
+  const EVENT = "ev1";
+
   async function seedJudge(
     judge: Score["judge"],
     standNr: string,
@@ -22,7 +24,7 @@ describe("JuryService", () => {
     rankPos: number,
   ) {
     for (const criterion of CRITERIA) {
-      await service.saveScore({ judge, standNr, criterion, value, rankPos });
+      await service.saveScore({ eventId: EVENT, judge, standNr, criterion, value, rankPos });
     }
   }
 
@@ -32,7 +34,7 @@ describe("JuryService", () => {
     await seedJudge("B", "s1", 5, 1);
     await seedJudge("B", "s2", 3, 2);
 
-    const { ranked, incomplete } = await service.finalRanking();
+    const { ranked, incomplete } = await service.finalRanking(EVENT);
     expect(incomplete).toEqual([]);
     expect(ranked.map((r) => r.standNr)).toEqual(["s1", "s2"]);
     expect(ranked[0].overall).toBe(4);
@@ -41,6 +43,7 @@ describe("JuryService", () => {
   it("reports a judge's drift flags", async () => {
     // Judge A on impact: s1 ranked best (1) but scored 3, s2 ranked 2 but scored 4 → drift.
     await service.saveScore({
+      eventId: EVENT,
       judge: "A",
       standNr: "s1",
       criterion: "impact",
@@ -48,13 +51,14 @@ describe("JuryService", () => {
       rankPos: 1,
     });
     await service.saveScore({
+      eventId: EVENT,
       judge: "A",
       standNr: "s2",
       criterion: "impact",
       value: 4,
       rankPos: 2,
     });
-    const flags = await service.driftFlags("A");
+    const flags = await service.driftFlags(EVENT, "A");
     expect(flags).toEqual([
       { judge: "A", criterion: "impact", betterRanked: "s1", worseRanked: "s2" },
     ]);
@@ -62,6 +66,7 @@ describe("JuryService", () => {
 
   it("exposes scoresForJudge as a passthrough", async () => {
     await service.saveScore({
+      eventId: EVENT,
       judge: "A",
       standNr: "7",
       criterion: "impact",
@@ -69,13 +74,14 @@ describe("JuryService", () => {
       rankPos: 1,
     });
     await service.saveScore({
+      eventId: EVENT,
       judge: "B",
       standNr: "7",
       criterion: "impact",
       value: 5,
       rankPos: 1,
     });
-    const scoresA = await service.scoresForJudge("A");
+    const scoresA = await service.scoresForJudge(EVENT, "A");
     expect(scoresA).toHaveLength(1);
     expect(scoresA[0].judge).toBe("A");
   });

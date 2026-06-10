@@ -42,7 +42,13 @@ Thumbs.db
 .nx/workspace-data
 .claude/worktrees
 .claude/settings.local.json
+.claude/scheduled_tasks.lock
 
 .angular
 
 vitest.config.*.timestamp*
+
+# sync-api SQLite DB (created in CWD by `nx serve sync-api`; prod uses DB_PATH + a volume)
+jury.db
+jury.db-*
+*.sqlite

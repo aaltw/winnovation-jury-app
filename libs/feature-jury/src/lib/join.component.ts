@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, type OnInit, inject, signal } from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import { Router } from "@angular/router";
 import type { JudgeSlot } from "@winnovation/domain";
@@ -8,7 +8,7 @@ import { JuryStore } from "./jury-store";
 const STEPS: ReadonlyArray<readonly [string, string, string]> = [
   ["camera", "Vastleggen", "Scoor elk project in seconden, aan de stand."],
   ["scale", "Vergelijken", "Plaats het t.o.v. projecten die je al zag."],
-  ["handshake", "Verzoenen", "Leg samen de eerlijke eindstand vast."],
+  ["handshake", "Afstemmen", "Bespreek verschillen en leg samen de eindstand vast."],
 ];
 
 @Component({
@@ -43,6 +43,51 @@ const STEPS: ReadonlyArray<readonly [string, string, string]> = [
             Geen account. Voer de eventcode in en kies je plek als jurylid.
           </p>
         </div>
+
+        @if (store.events().length) {
+          <div style="margin-top:32px">
+            <label class="wv-label" style="color:rgba(255,255,255,.55)">Kies een event</label>
+            <div style="display:flex;flex-direction:column;gap:8px;margin-top:6px">
+              @for (ev of store.events(); track ev.id) {
+                <div
+                  [style.border]="
+                    code === ev.eventCode ? '1.5px solid var(--brand)' : '1.5px solid rgba(255,255,255,.16)'
+                  "
+                  style="display:flex;align-items:stretch;border-radius:14px;background:rgba(255,255,255,.05);overflow:hidden"
+                >
+                  <button
+                    type="button"
+                    (click)="chooseEvent(ev.eventCode)"
+                    style="flex:1;padding:13px 14px;background:none;border:none;color:#fff;text-align:left;cursor:pointer"
+                  >
+                    <div style="font-weight:700;font-size:15px">{{ ev.name }}</div>
+                    <div style="font-size:12px;color:rgba(255,255,255,.5);margin-top:2px">
+                      {{ ev.eventCode }} · {{ ev.projectCount }} projecten
+                    </div>
+                  </button>
+                  @if (confirmingDelete() === ev.id) {
+                    <button
+                      type="button"
+                      (click)="deleteEvent(ev.id, ev.eventCode)"
+                      style="padding:0 14px;background:#C0392B;border:none;color:#fff;cursor:pointer;font-weight:700;font-size:12.5px;white-space:nowrap"
+                    >
+                      Zeker?
+                    </button>
+                  } @else {
+                    <button
+                      type="button"
+                      (click)="confirmingDelete.set(ev.id)"
+                      aria-label="Event verwijderen"
+                      style="padding:0 13px;background:none;border:none;color:rgba(255,255,255,.4);cursor:pointer"
+                    >
+                      <wn-icon name="trash" [size]="17" />
+                    </button>
+                  }
+                </div>
+              }
+            </div>
+          </div>
+        }
 
         <div style="margin-top:32px">
           <label class="wv-label" style="color:rgba(255,255,255,.55)">Eventcode</label>
@@ -145,8 +190,8 @@ const STEPS: ReadonlyArray<readonly [string, string, string]> = [
     </div>
   `,
 })
-export class JoinComponent {
-  private readonly store = inject(JuryStore);
+export class JoinComponent implements OnInit {
+  protected readonly store = inject(JuryStore);
   private readonly router = inject(Router);
 
   protected readonly judge = this.store.judge;
@@ -156,6 +201,28 @@ export class JoinComponent {
   protected newName = "";
   protected readonly error = signal(false);
   protected readonly creating = signal(false);
+  protected readonly confirmingDelete = signal<string | null>(null);
+
+  async ngOnInit(): Promise<void> {
+    // Session was restored by the app initializer → skip the join screen.
+    if (this.store.event()) {
+      await this.router.navigate(["/home"]);
+      return;
+    }
+    await this.store.refreshEventList();
+  }
+
+  protected chooseEvent(code: string): void {
+    this.code = code;
+    this.error.set(false);
+    this.confirmingDelete.set(null);
+  }
+
+  protected async deleteEvent(eventId: string, eventCode: string): Promise<void> {
+    this.confirmingDelete.set(null);
+    if (this.code === eventCode) this.code = "";
+    await this.store.deleteEvent(eventId, eventCode);
+  }
 
   protected pick(slot: JudgeSlot): void {
     this.store.setJudge(slot);

@@ -1,5 +1,5 @@
 import Database from "better-sqlite3";
-import type { ChangeSet, EventRow, SyncStore } from "./store";
+import type { ChangeSet, EventListItem, EventRow, SyncStore } from "./store";
 
 export class SqliteStore implements SyncStore {
   private db: Database.Database;
@@ -79,5 +79,27 @@ export class SqliteStore implements SyncStore {
       scores: q("scores") as ChangeSet["scores"],
       captureMeta: q("captureMeta") as ChangeSet["captureMeta"],
     };
+  }
+
+  deleteEvent(eventId: string): void {
+    const tx = this.db.transaction(() => {
+      this.db.prepare("DELETE FROM captureMeta WHERE eventId = ?").run(eventId);
+      this.db.prepare("DELETE FROM scores WHERE eventId = ?").run(eventId);
+      this.db.prepare("DELETE FROM deelnemers WHERE eventId = ?").run(eventId);
+      this.db.prepare("DELETE FROM events WHERE id = ?").run(eventId);
+    });
+    tx();
+  }
+
+  listEvents(): EventListItem[] {
+    return this.db
+      .prepare(
+        `SELECT e.id, e.name, e.date, e.eventCode, COUNT(d.standNr) AS projectCount
+         FROM events e
+         LEFT JOIN deelnemers d ON d.eventId = e.id
+         GROUP BY e.id, e.name, e.date, e.eventCode
+         ORDER BY e.name`,
+      )
+      .all() as EventListItem[];
   }
 }

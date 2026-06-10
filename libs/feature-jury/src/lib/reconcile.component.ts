@@ -1,6 +1,20 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from "@angular/core";
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  inject,
+  signal,
+} from "@angular/core";
 import { Router } from "@angular/router";
-import { CRITERIA, type Criterion, type JudgeSlot, type Score } from "@winnovation/domain";
+import {
+  CRITERIA,
+  type Criterion,
+  type JudgeSlot,
+  type Score,
+  type ScoreValue,
+  bracketingAnchors,
+} from "@winnovation/domain";
 import {
   AppBarComponent,
   IconComponent,
@@ -41,7 +55,7 @@ interface IncompleteRow {
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="wv-screen">
-      <wn-app-bar title="Verzoenen" sub="jij + jurylid B">
+      <wn-app-bar title="Afstemmen" [sub]="'jij + jurylid ' + other()">
         <button slot="left" class="wv-appbar-btn" (click)="go('/home')">
           <wn-icon name="chevLeft" [size]="20" />
         </button>
@@ -51,8 +65,10 @@ interface IncompleteRow {
       <div class="wv-scroll">
         <div class="wv-pad" style="padding-top:4px">
           <p style="font-size:13px;color:var(--muted);margin:0 0 14px;line-height:1.5">
-            Samengevoegde ranglijst. <b style="color:var(--ink)">Grootste meningsverschillen eerst</b>
-            — bespreek die en leg de eindstand vast.
+            Doe dit samen, aan het eind van de dag.
+            <b style="color:var(--ink)">Grootste meningsverschillen eerst</b> — open een project,
+            bespreek het verschil en pas je eigen cijfers aan met − en +. De lijst werkt live bij op
+            beide telefoons. Eens? Leg dan de eindstand vast.
           </p>
 
           <div class="wv-list">
@@ -86,11 +102,11 @@ interface IncompleteRow {
                     <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
                       <span style="font-size:11px;font-weight:700;color:var(--brand-ink)">Jij</span>
                       <div class="wv-bar" style="flex:1;max-width:80px;height:6px">
-                        <span [style.width]="barW(r.ptsA)" style="background:var(--brand)"></span>
+                        <span [style.width]="barW(mine(r))" style="background:var(--brand)"></span>
                       </div>
-                      <span style="font-size:11px;font-weight:700;color:var(--coral)">B</span>
+                      <span style="font-size:11px;font-weight:700;color:var(--coral)">{{ other() }}</span>
                       <div class="wv-bar" style="flex:1;max-width:80px;height:6px">
-                        <span [style.width]="barW(r.ptsB)" style="background:var(--coral)"></span>
+                        <span [style.width]="barW(theirs(r))" style="background:var(--coral)"></span>
                       </div>
                     </div>
                   </div>
@@ -120,7 +136,7 @@ interface IncompleteRow {
                       >
                       <span
                         style="font-size:10.5px;font-weight:800;color:var(--coral);text-transform:uppercase"
-                        >B</span
+                        >{{ other() }}</span
                       >
                       @for (c of criteria; track c) {
                         <span style="display:flex;align-items:center;gap:7px;font-weight:600">
@@ -130,16 +146,66 @@ interface IncompleteRow {
                           ></span>
                           {{ labels[c] }}
                         </span>
-                        <span
-                          [style.color]="color(c)"
-                          style="font-weight:800;font-family:var(--font-display)"
-                          >{{ val(r.standNr, c, "A") }}</span
-                        >
+                        <span style="display:inline-flex;align-items:center;gap:6px">
+                          <button
+                            type="button"
+                            (click)="bump(r.standNr, c, -1)"
+                            [disabled]="numVal(r.standNr, c, me()) <= 1"
+                            style="width:26px;height:26px;border-radius:8px;border:1px solid var(--line-2);background:#fff;color:var(--ink-2);font-weight:800;cursor:pointer;display:grid;place-items:center"
+                          >
+                            −
+                          </button>
+                          <span
+                            [style.color]="color(c)"
+                            style="font-weight:800;font-family:var(--font-display);min-width:14px;text-align:center"
+                            >{{ val(r.standNr, c, me()) }}</span
+                          >
+                          <button
+                            type="button"
+                            (click)="bump(r.standNr, c, 1)"
+                            [disabled]="numVal(r.standNr, c, me()) >= 5"
+                            style="width:26px;height:26px;border-radius:8px;border:1px solid var(--line-2);background:#fff;color:var(--ink-2);font-weight:800;cursor:pointer;display:grid;place-items:center"
+                          >
+                            +
+                          </button>
+                        </span>
                         <span style="font-weight:800;font-family:var(--font-display);color:var(--ink-2)">{{
-                          val(r.standNr, c, "B")
+                          val(r.standNr, c, other())
                         }}</span>
                       }
                     </div>
+                    <div style="margin-top:14px">
+                      <label class="wv-label">Notitie <span class="opt">— privé, voor jezelf</span></label>
+                      <textarea
+                        class="wv-textarea"
+                        rows="2"
+                        placeholder="Korte reden voor je oordeel…"
+                        [value]="metas()[r.standNr]?.note ?? ''"
+                        (input)="onMeta(r.standNr, 'note', $any($event.target).value)"
+                      ></textarea>
+                    </div>
+                    <div style="margin-top:10px">
+                      <label class="wv-label">Review <span class="opt">— feedback voor het team</span></label>
+                      <textarea
+                        class="wv-textarea"
+                        rows="2"
+                        placeholder="Opbouwende tip voor de deelnemers…"
+                        [value]="metas()[r.standNr]?.review ?? ''"
+                        (input)="onMeta(r.standNr, 'review', $any($event.target).value)"
+                      ></textarea>
+                    </div>
+                    @if (otherReviews()[r.standNr]; as theirReview) {
+                      <div style="margin-top:10px">
+                        <label class="wv-label"
+                          >Review van jurylid {{ other() }} <span class="opt">— alleen lezen</span></label
+                        >
+                        <div
+                          style="font-size:13px;line-height:1.5;color:var(--ink-2);background:#fff;border:1px solid var(--line);border-radius:11px;padding:10px 12px"
+                        >
+                          {{ theirReview }}
+                        </div>
+                      </div>
+                    }
                   </div>
                 }
               </div>
@@ -197,22 +263,62 @@ export class ReconcileComponent {
   protected readonly rows = signal<Row[]>([]);
   protected readonly incomplete = signal<IncompleteRow[]>([]);
   protected readonly open = signal<string | null>(null);
+  protected readonly metas = signal<Record<string, { note: string; review: string }>>({});
+  protected readonly otherReviews = signal<Record<string, string>>({});
+  private readonly dirty = new Set<string>();
+  private metaTimer: ReturnType<typeof setTimeout> | null = null;
   private valueMap = new Map<string, number>();
+
+  protected readonly me = this.store.judge;
+  protected readonly other = computed<JudgeSlot>(() => (this.me() === "A" ? "B" : "A"));
 
   protected color = criterionColor;
   protected fmt = fmtStand;
   private readonly palette = ["#4B3BF5", "#FF5A3C", "#00A7C4", "#06BE7E", "#F5A300", "#8A5BE0"];
 
-  async ngOnInit(): Promise<void> {
+  constructor() {
+    // Re-derive the merged ranking whenever a live remote change bumps the revision.
+    effect(() => {
+      this.store.revision();
+      void this.load();
+    });
+  }
+
+  private async load(): Promise<void> {
     await this.store.refreshDeelnemers();
     const byStand = new Map(this.store.deelnemers().map((d) => [d.standNr, d]));
-    const keywords = new Map(
+    const metas = new Map(
       await Promise.all(
         this.store
           .deelnemers()
-          .map(
-            async (d) => [d.standNr, (await this.store.metaFor(d.standNr))?.keyword ?? ""] as const,
-          ),
+          .map(async (d) => [d.standNr, await this.store.metaFor(d.standNr)] as const),
+      ),
+    );
+    const keywords = new Map([...metas].map(([nr, m]) => [nr, m?.keyword ?? ""]));
+    this.otherReviews.set(
+      Object.fromEntries(
+        await Promise.all(
+          this.store
+            .deelnemers()
+            .map(
+              async (d) =>
+                [
+                  d.standNr,
+                  (await this.store.metaFor(d.standNr, this.other()))?.review ?? "",
+                ] as const,
+            ),
+        ),
+      ),
+    );
+    this.metas.update((cur) =>
+      Object.fromEntries(
+        [...metas].map(([nr, m]) => [
+          nr,
+          // Keep unsaved local edits over a concurrent reload.
+          this.dirty.has(nr)
+            ? (cur[nr] ?? { note: "", review: "" })
+            : { note: m?.note ?? "", review: m?.review ?? "" },
+        ]),
       ),
     );
 
@@ -222,6 +328,7 @@ export class ReconcileComponent {
     ]);
     const standsA = new Set(scoresA.map((s) => s.standNr));
     const standsB = new Set(scoresB.map((s) => s.standNr));
+    this.valueMap = new Map<string, number>();
     for (const s of [
       ...scoresA.map((s) => ["A", s] as const),
       ...scoresB.map((s) => ["B", s] as const),
@@ -234,12 +341,22 @@ export class ReconcileComponent {
         .reduce((sum, s) => sum + ((s.rankPos as number) - 1), 0);
 
     const { ranked, incomplete } = await this.store.finalRanking();
-    const gaps = await this.store.disagreements();
-    const maxGap = Math.max(1, ...ranked.map((r) => gaps.get(r.standNr) ?? 0));
+    await this.store.disagreements(); // pulls the latest remote state
+
+    // Discussion flag on absolute score differences: one criterion ≥2 apart,
+    // or ≥4 points apart in total. Rank-based gaps stay hot even after the
+    // jurors align their scores, which reads as "still to discuss".
+    const scoreDiffs = (standNr: string): number[] =>
+      CRITERIA.map((c) => {
+        const a = this.valueMap.get(`A|${standNr}|${c}`);
+        const b = this.valueMap.get(`B|${standNr}|${c}`);
+        return a != null && b != null ? Math.abs(a - b) : 0;
+      });
 
     const rows: Row[] = ranked
       .map((r) => {
-        const gap = gaps.get(r.standNr) ?? 0;
+        const diffs = scoreDiffs(r.standNr);
+        const gap = diffs.reduce((sum, d) => sum + d, 0);
         return {
           standNr: r.standNr,
           keyword: keywords.get(r.standNr) ?? "",
@@ -247,7 +364,7 @@ export class ReconcileComponent {
           gap,
           ptsA: pts(scoresA, r.standNr),
           ptsB: pts(scoresB, r.standNr),
-          hot: gap >= maxGap * 0.6 && gap > 1,
+          hot: Math.max(...diffs) >= 2 || gap >= 4,
         };
       })
       .sort((a, b) => b.gap - a.gap);
@@ -272,9 +389,53 @@ export class ReconcileComponent {
     return v == null ? "—" : String(v);
   }
 
+  protected mine(r: Row): number {
+    return this.me() === "A" ? r.ptsA : r.ptsB;
+  }
+
+  protected theirs(r: Row): number {
+    return this.me() === "A" ? r.ptsB : r.ptsA;
+  }
+
+  protected numVal(standNr: string, criterion: Criterion, judge: JudgeSlot): number {
+    return this.valueMap.get(`${judge}|${standNr}|${criterion}`) ?? 0;
+  }
+
+  protected async bump(standNr: string, criterion: Criterion, delta: number): Promise<void> {
+    const cur = this.numVal(standNr, criterion, this.me());
+    if (cur === 0) return;
+    const next = Math.min(5, Math.max(1, cur + delta));
+    if (next === cur) return;
+    await this.store.updateScoreValue(criterion, standNr, next as ScoreValue);
+    // Re-sort the ranking so the disagreement list reflects the new score.
+    const others = (await this.store.placedFor(criterion)).filter((p) => p.standNr !== standNr);
+    await this.store.applyPlacement(
+      criterion,
+      standNr,
+      bracketingAnchors(others, next as ScoreValue).index,
+    );
+    await this.load();
+  }
+
   protected colorForStand(standNr: string): string {
     const n = Number.parseInt(standNr, 10) || standNr.length;
     return this.palette[n % this.palette.length];
+  }
+
+  protected onMeta(standNr: string, field: "note" | "review", value: string): void {
+    this.dirty.add(standNr);
+    this.metas.update((m) => ({
+      ...m,
+      [standNr]: { ...(m[standNr] ?? { note: "", review: "" }), [field]: value },
+    }));
+    if (this.metaTimer) clearTimeout(this.metaTimer);
+    this.metaTimer = setTimeout(() => {
+      const cur = this.metas()[standNr];
+      if (!cur) return;
+      void this.store
+        .updateCaptureMeta(standNr, { note: cur.note, review: cur.review })
+        .then(() => this.dirty.delete(standNr));
+    }, 600);
   }
 
   protected toggle(standNr: string): void {

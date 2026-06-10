@@ -1,5 +1,6 @@
 import {
   type ApplicationConfig,
+  inject,
   isDevMode,
   provideAppInitializer,
   provideBrowserGlobalErrorListeners,
@@ -7,6 +8,7 @@ import {
 import { provideRouter } from "@angular/router";
 import { provideServiceWorker } from "@angular/service-worker";
 import { seedDemo } from "@winnovation/data-access";
+import { JuryStore } from "@winnovation/feature-jury";
 import { appRoutes } from "./app.routes";
 
 export const appConfig: ApplicationConfig = {
@@ -23,6 +25,12 @@ export const appConfig: ApplicationConfig = {
     provideAppInitializer(() => {
       if (!isDevMode()) return;
       return seedDemo().catch((err) => console.warn("[demo seed] skipped:", err));
+    }),
+    // Restore the last {eventId, judge} so a refresh lands back in the event
+    // instead of the join screen. Runs before routing; failures are swallowed.
+    provideAppInitializer(() => {
+      const store = inject(JuryStore);
+      return store.restoreSession().catch(() => false);
     }),
   ],
 };

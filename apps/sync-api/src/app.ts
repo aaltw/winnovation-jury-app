@@ -1,4 +1,6 @@
 import { Hono } from "hono";
+import { streamSSE } from "hono/streaming";
+import { ChangeBus } from "./change-bus";
 import type { SyncStore } from "./store";
 
 export interface IdGen {
@@ -16,7 +18,11 @@ export const defaultGen: IdGen = {
     ).join(""),
 };
 
-export function createApp(store: SyncStore, gen: IdGen = defaultGen) {
+export function createApp(
+  store: SyncStore,
+  gen: IdGen = defaultGen,
+  bus: ChangeBus = new ChangeBus(),
+) {
   const app = new Hono();
 
   app.post("/events", async (c) => {
@@ -27,10 +33,28 @@ export function createApp(store: SyncStore, gen: IdGen = defaultGen) {
     return c.json({ id, eventCode });
   });
 
+  app.get("/events", (c) => c.json(store.listEvents()));
+
   app.post("/events/:code/join", (c) => {
     const event = store.findEventByCode(c.req.param("code"));
     if (!event) return c.json({ error: "unknown event" }, 404);
-    return c.json({ eventId: event.id, name: event.name });
+    // Return the full event so the joining device can persist a complete
+    // JuryEvent locally (it only had the code typed in by the user).
+    return c.json({
+      eventId: event.id,
+      name: event.name,
+      date: event.date,
+      eventCode: event.eventCode,
+    });
+  });
+
+  app.delete("/events/:eventId", (c) => {
+    const eventId = c.req.param("eventId");
+    // Same guard as /changes: the event code is the shared secret.
+    const event = store.findEventByCode(c.req.header("x-event-code") ?? "");
+    if (!event || event.id !== eventId) return c.json({ error: "forbidden" }, 403);
+    store.deleteEvent(eventId);
+    return c.json({ ok: true });
   });
 
   // Lightweight guard: the event code is the shared secret (v1; harden later).
@@ -43,13 +67,37 @@ export function createApp(store: SyncStore, gen: IdGen = defaultGen) {
   });
 
   app.post("/events/:eventId/changes", async (c) => {
-    store.applyChanges(c.req.param("eventId"), await c.req.json());
+    const eventId = c.req.param("eventId");
+    store.applyChanges(eventId, await c.req.json());
+    bus.publish(eventId);
     return c.json({ ok: true });
   });
 
   app.get("/events/:eventId/changes", (c) => {
     const since = Number(c.req.query("since") ?? 0);
     return c.json(store.changesSince(c.req.param("eventId"), since));
+  });
+
+  app.get("/events/:eventId/stream", (c) => {
+    const eventId = c.req.param("eventId");
+    // EventSource cannot set custom headers, so the code guard is a query param.
+    const event = store.findEventByCode(c.req.query("code") ?? "");
+    if (!event || event.id !== eventId) return c.json({ error: "forbidden" }, 403);
+    return streamSSE(c, async (stream) => {
+      const unsubscribe = bus.subscribe(eventId, () => {
+        void stream.writeSSE({ data: "changed" });
+      });
+      const ping = setInterval(() => {
+        void stream.writeSSE({ data: "ping", event: "ping" });
+      }, 25000);
+      await new Promise<void>((resolve) => {
+        stream.onAbort(() => {
+          clearInterval(ping);
+          unsubscribe();
+          resolve();
+        });
+      });
+    });
   });
 
   return app;

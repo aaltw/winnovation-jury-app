@@ -21,6 +21,7 @@ export interface Deelnemer {
 }
 
 export interface Score {
+  eventId: string; // the event this score belongs to; first component of the storage key
   judge: JudgeSlot;
   standNr: string;
   criterion: Criterion;
@@ -30,11 +31,13 @@ export interface Score {
 }
 
 export interface CaptureMeta {
+  eventId: string; // the event this capture belongs to; first component of the storage key
   judge: JudgeSlot;
   standNr: string;
   keyword: string;
   note: string;
   review: string;
+  criterionNotes?: Partial<Record<Criterion, string>>; // optional note per criterion
   photoRef: string | null; // id into the local photos table; null when no photo
   updatedAt?: number; // epoch ms; set by the sync layer
 }
