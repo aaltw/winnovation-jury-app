@@ -199,6 +199,25 @@ export class JuryStore {
     return event ? this.service.scoresForJudge(event.id, judge) : Promise.resolve([]);
   }
 
+  /** Share the deelnemer identity early (before scores) so the other juror can join the booth. */
+  async announceDeelnemer(
+    standNr: string,
+    projectgroep: string,
+    isVervolgproject = false,
+  ): Promise<void> {
+    const event = this.event();
+    if (!event || !standNr) return;
+    await this.service.upsertDeelnemer({
+      eventId: event.id,
+      standNr,
+      projectgroep,
+      isVervolgproject,
+      updatedAt: this.clock(),
+    });
+    await this.refreshDeelnemers();
+    this.pushSoon();
+  }
+
   async captureDeelnemer(input: CaptureInput): Promise<void> {
     const event = this.event();
     if (!event) throw new Error("No active event");

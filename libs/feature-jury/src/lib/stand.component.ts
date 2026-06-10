@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  effect,
   inject,
   type OnInit,
   signal,
@@ -206,6 +207,7 @@ export class StandComponent implements OnInit {
   protected readonly scores = signal<Partial<Record<Criterion, ScoreValue>>>({});
 
   protected readonly editing = signal(false);
+  private announceTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
     // Prefilled when arriving from a booth the other juror already entered, so
@@ -215,6 +217,19 @@ export class StandComponent implements OnInit {
     const pg = qp.get("projectgroep");
     if (std) this.standNr.set(std.replace(/\D/g, "").slice(0, 2));
     if (pg) this.projectgroep.set(pg);
+
+    // Sync the deelnemer identity as soon as nr + teamnaam are known, so the
+    // other juror sees the booth (and gets prefill) before this juror saves.
+    effect(() => {
+      const standNr = this.standNr().trim();
+      const projectgroep = this.projectgroep().trim();
+      const vervolg = this.vervolg();
+      if (!standNr || !projectgroep) return;
+      if (this.announceTimer) clearTimeout(this.announceTimer);
+      this.announceTimer = setTimeout(() => {
+        void this.store.announceDeelnemer(standNr, projectgroep, vervolg);
+      }, 800);
+    });
   }
 
   async ngOnInit(): Promise<void> {
