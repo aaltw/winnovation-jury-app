@@ -211,14 +211,17 @@ export class JuryStore {
       isVervolgproject: input.isVervolgproject,
       updatedAt,
     });
+    // Re-capturing an already-placed project must not wipe its ranking.
+    const existing = await this.loadScores(judge);
     for (const criterion of CRITERIA) {
+      const prior = existing.find((s) => s.standNr === input.standNr && s.criterion === criterion);
       await this.service.saveScore({
         eventId: event.id,
         judge,
         standNr: input.standNr,
         criterion,
         value: input.scores[criterion],
-        rankPos: null,
+        rankPos: prior?.rankPos ?? null,
         updatedAt,
       });
     }

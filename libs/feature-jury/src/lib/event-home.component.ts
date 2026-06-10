@@ -140,9 +140,7 @@ import { JuryStore } from "./jury-store";
                   [color]="colorFor(d.standNr)"
                   [drift]="scoredByMe(d.standNr) && driftSet().has(d.standNr)"
                   [tappable]="true"
-                  (click)="
-                    scoredByMe(d.standNr) ? go('/review') : scoreBooth(d.standNr, d.projectgroep)
-                  "
+                  (click)="scoreBooth(d.standNr, d.projectgroep)"
                 >
                   @if (!scoredByMe(d.standNr)) {
                     <span slot="trailing" class="wv-chip wv-chip-line">Nog niet door jou</span>

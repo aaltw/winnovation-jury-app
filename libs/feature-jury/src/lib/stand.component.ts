@@ -1,4 +1,11 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from "@angular/core";
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  inject,
+  type OnInit,
+  signal,
+} from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import { ActivatedRoute, Router } from "@angular/router";
 import { CRITERIA, type Criterion, type ScoreValue } from "@winnovation/domain";
@@ -33,7 +40,11 @@ const LABELS: Record<Criterion, string> = {
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="wv-screen">
-      <wn-app-bar title="Nieuwe deelnemer" [sub]="scoredCount() + '/4 criteria · < 1 min'" [bordered]="true">
+      <wn-app-bar
+        [title]="editing() ? 'Deelnemer bewerken' : 'Nieuwe deelnemer'"
+        [sub]="scoredCount() + '/4 criteria · < 1 min'"
+        [bordered]="true"
+      >
         <button slot="left" class="wv-appbar-btn" (click)="back()">
           <wn-icon name="chevLeft" [size]="20" />
         </button>
@@ -179,7 +190,7 @@ const LABELS: Record<Criterion, string> = {
     </div>
   `,
 })
-export class StandComponent {
+export class StandComponent implements OnInit {
   private readonly store = inject(JuryStore);
   private readonly router = inject(Router);
 
@@ -194,6 +205,8 @@ export class StandComponent {
   protected readonly photoRef = signal<string | null>(null);
   protected readonly scores = signal<Partial<Record<Criterion, ScoreValue>>>({});
 
+  protected readonly editing = signal(false);
+
   constructor() {
     // Prefilled when arriving from a booth the other juror already entered, so
     // this juror keeps the shared standNr/projectgroep and just adds own scores.
@@ -204,6 +217,30 @@ export class StandComponent {
     if (pg) this.projectgroep.set(pg);
   }
 
+  async ngOnInit(): Promise<void> {
+    // Opened for a booth this juror already captured → load it as an edit.
+    const standNr = this.standNr().trim();
+    if (!standNr) return;
+    const mine = (await this.store.scoresForJudge(this.store.judge())).filter(
+      (s) => s.standNr === standNr,
+    );
+    if (!mine.length) return;
+    this.editing.set(true);
+    this.scores.set(Object.fromEntries(mine.map((s) => [s.criterion, s.value])));
+    const deelnemer = this.store.deelnemers().find((d) => d.standNr === standNr);
+    if (deelnemer) {
+      this.projectgroep.set(deelnemer.projectgroep);
+      this.vervolg.set(deelnemer.isVervolgproject);
+    }
+    const meta = await this.store.metaFor(standNr);
+    if (meta) {
+      this.keyword.set(meta.keyword);
+      this.note.set(meta.note);
+      this.review.set(meta.review);
+      this.photoRef.set(meta.photoRef ?? null);
+    }
+  }
+
   protected readonly scoredCount = computed(
     () => CRITERIA.filter((c) => this.scores()[c] != null).length,
   );
@@ -212,7 +249,9 @@ export class StandComponent {
   );
   protected readonly saveLabel = computed(() => {
     if (this.canSave()) {
-      return "Opslaan & plaatsen";
+      return this.editing() && this.store.isPlaced(this.standNr().trim())
+        ? "Wijzigingen opslaan"
+        : "Opslaan & plaatsen";
     }
     if (this.standNr().trim() && this.keyword().trim()) {
       return `Nog ${4 - this.scoredCount()} criteria`;
@@ -252,6 +291,8 @@ export class StandComponent {
       scores: this.scores() as Record<Criterion, ScoreValue>,
       photoRef: this.photoRef(),
     });
-    await this.router.navigate(["/compare"]);
+    // Edits keep their placement (rankPos preserved) → home; new captures go place.
+    const done = this.editing() && this.store.isPlaced(this.standNr().trim());
+    await this.router.navigate([done ? "/home" : "/compare"]);
   }
 }
