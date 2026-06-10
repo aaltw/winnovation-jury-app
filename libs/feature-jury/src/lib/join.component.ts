@@ -1,4 +1,11 @@
-import { ChangeDetectionStrategy, Component, type OnInit, inject, signal } from "@angular/core";
+import {
+  ChangeDetectionStrategy,
+  Component,
+  type OnInit,
+  computed,
+  inject,
+  signal,
+} from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import { Router } from "@angular/router";
 import type { JudgeSlot } from "@winnovation/domain";
@@ -43,6 +50,45 @@ const STEPS: ReadonlyArray<readonly [string, string, string]> = [
             Geen account. Voer de eventcode in en kies je plek als jurylid.
           </p>
         </div>
+
+        @if (showInstall()) {
+          <div
+            style="display:flex;align-items:center;gap:12px;margin-top:26px;padding:13px 14px;border-radius:14px;background:rgba(75,59,245,.22);border:1.5px solid rgba(94,82,255,.55)"
+          >
+            <span
+              style="width:38px;height:38px;border-radius:11px;background:var(--brand);display:grid;place-items:center;flex:none"
+            >
+              <wn-icon name="download" [size]="19" />
+            </span>
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:700;font-size:14px">Zet 'm op je beginscherm</div>
+              <div style="font-size:12px;color:rgba(255,255,255,.6);margin-top:2px;line-height:1.4">
+                @if (installEvt()) {
+                  Werkt dan als app, ook offline.
+                } @else {
+                  Via <b>Delen</b> → <b>Zet op beginscherm</b>. Werkt dan als app, ook offline.
+                }
+              </div>
+            </div>
+            @if (installEvt()) {
+              <button
+                type="button"
+                (click)="install()"
+                style="flex:none;padding:9px 14px;border-radius:11px;border:none;background:var(--brand);color:#fff;font-weight:700;font-size:13px;cursor:pointer"
+              >
+                Installeer
+              </button>
+            }
+            <button
+              type="button"
+              (click)="dismissInstall()"
+              aria-label="Sluiten"
+              style="flex:none;background:none;border:none;color:rgba(255,255,255,.45);cursor:pointer;padding:4px"
+            >
+              <wn-icon name="x" [size]="16" />
+            </button>
+          </div>
+        }
 
         @if (store.events().length) {
           <div style="margin-top:32px">
@@ -202,6 +248,46 @@ export class JoinComponent implements OnInit {
   protected readonly error = signal(false);
   protected readonly creating = signal(false);
   protected readonly confirmingDelete = signal<string | null>(null);
+
+  /** Chrome/Android fires beforeinstallprompt; we stash it for our own button. */
+  protected readonly installEvt = signal<(Event & { prompt: () => Promise<void> }) | null>(null);
+  private readonly installDismissed = signal(
+    typeof localStorage !== "undefined" && localStorage.getItem("wn-install-dismissed") === "1",
+  );
+  protected readonly showInstall = computed(() => {
+    if (this.installDismissed()) return false;
+    if (typeof window === "undefined") return false;
+    const standalone =
+      window.matchMedia?.("(display-mode: standalone)").matches ||
+      ("standalone" in navigator && (navigator as { standalone?: boolean }).standalone === true);
+    if (standalone) return false;
+    // Android/desktop Chrome: only once the browser offers the prompt.
+    // iOS Safari never fires it → show the add-to-homescreen hint instead.
+    return this.installEvt() !== null || this.isIos();
+  });
+
+  private isIos(): boolean {
+    return /iphone|ipad|ipod/i.test(navigator.userAgent);
+  }
+
+  constructor() {
+    window.addEventListener("beforeinstallprompt", (e) => {
+      e.preventDefault();
+      this.installEvt.set(e as Event & { prompt: () => Promise<void> });
+    });
+  }
+
+  protected async install(): Promise<void> {
+    const evt = this.installEvt();
+    if (!evt) return;
+    this.installEvt.set(null);
+    await evt.prompt().catch(() => undefined);
+  }
+
+  protected dismissInstall(): void {
+    this.installDismissed.set(true);
+    localStorage.setItem("wn-install-dismissed", "1");
+  }
 
   async ngOnInit(): Promise<void> {
     // Session was restored by the app initializer → skip the join screen.
