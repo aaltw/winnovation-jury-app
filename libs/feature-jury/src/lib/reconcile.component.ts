@@ -341,12 +341,22 @@ export class ReconcileComponent {
         .reduce((sum, s) => sum + ((s.rankPos as number) - 1), 0);
 
     const { ranked, incomplete } = await this.store.finalRanking();
-    const gaps = await this.store.disagreements();
-    const maxGap = Math.max(1, ...ranked.map((r) => gaps.get(r.standNr) ?? 0));
+    await this.store.disagreements(); // pulls the latest remote state
+
+    // Discussion flag on absolute score differences: one criterion ≥2 apart,
+    // or ≥4 points apart in total. Rank-based gaps stay hot even after the
+    // jurors align their scores, which reads as "still to discuss".
+    const scoreDiffs = (standNr: string): number[] =>
+      CRITERIA.map((c) => {
+        const a = this.valueMap.get(`A|${standNr}|${c}`);
+        const b = this.valueMap.get(`B|${standNr}|${c}`);
+        return a != null && b != null ? Math.abs(a - b) : 0;
+      });
 
     const rows: Row[] = ranked
       .map((r) => {
-        const gap = gaps.get(r.standNr) ?? 0;
+        const diffs = scoreDiffs(r.standNr);
+        const gap = diffs.reduce((sum, d) => sum + d, 0);
         return {
           standNr: r.standNr,
           keyword: keywords.get(r.standNr) ?? "",
@@ -354,7 +364,7 @@ export class ReconcileComponent {
           gap,
           ptsA: pts(scoresA, r.standNr),
           ptsB: pts(scoresB, r.standNr),
-          hot: gap >= maxGap * 0.6 && gap > 1,
+          hot: Math.max(...diffs) >= 2 || gap >= 4,
         };
       })
       .sort((a, b) => b.gap - a.gap);
