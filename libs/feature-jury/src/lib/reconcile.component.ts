@@ -193,6 +193,18 @@ interface IncompleteRow {
                         (input)="onMeta(r.standNr, 'review', $any($event.target).value)"
                       ></textarea>
                     </div>
+                    @if (otherReviews()[r.standNr]; as theirReview) {
+                      <div style="margin-top:10px">
+                        <label class="wv-label"
+                          >Review van jurylid {{ other() }} <span class="opt">— alleen lezen</span></label
+                        >
+                        <div
+                          style="font-size:13px;line-height:1.5;color:var(--ink-2);background:#fff;border:1px solid var(--line);border-radius:11px;padding:10px 12px"
+                        >
+                          {{ theirReview }}
+                        </div>
+                      </div>
+                    }
                   </div>
                 }
               </div>
@@ -251,6 +263,7 @@ export class ReconcileComponent {
   protected readonly incomplete = signal<IncompleteRow[]>([]);
   protected readonly open = signal<string | null>(null);
   protected readonly metas = signal<Record<string, { note: string; review: string }>>({});
+  protected readonly otherReviews = signal<Record<string, string>>({});
   private readonly dirty = new Set<string>();
   private metaTimer: ReturnType<typeof setTimeout> | null = null;
   private valueMap = new Map<string, number>();
@@ -281,6 +294,21 @@ export class ReconcileComponent {
       ),
     );
     const keywords = new Map([...metas].map(([nr, m]) => [nr, m?.keyword ?? ""]));
+    this.otherReviews.set(
+      Object.fromEntries(
+        await Promise.all(
+          this.store
+            .deelnemers()
+            .map(
+              async (d) =>
+                [
+                  d.standNr,
+                  (await this.store.metaFor(d.standNr, this.other()))?.review ?? "",
+                ] as const,
+            ),
+        ),
+      ),
+    );
     this.metas.update((cur) =>
       Object.fromEntries(
         [...metas].map(([nr, m]) => [

@@ -314,10 +314,10 @@ export class JuryStore {
     return this.loadScores(judge);
   }
 
-  metaFor(standNr: string): Promise<CaptureMeta | undefined> {
+  metaFor(standNr: string, judge: JudgeSlot = this.judge()): Promise<CaptureMeta | undefined> {
     const event = this.event();
     if (!event) return Promise.resolve(undefined);
-    return this.service.getCaptureMeta(event.id, this.judge(), standNr);
+    return this.service.getCaptureMeta(event.id, judge, standNr);
   }
 
   /** Patch this juror's note/review for a captured stand (used while discussing in Afstemmen). */
