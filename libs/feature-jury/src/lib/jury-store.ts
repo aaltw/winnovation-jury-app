@@ -36,6 +36,7 @@ export interface CaptureInput {
   keyword: string;
   note: string;
   review: string;
+  criterionNotes?: Partial<Record<Criterion, string>>;
   scores: Record<Criterion, ScoreValue>;
   photoRef?: string | null;
 }
@@ -251,6 +252,7 @@ export class JuryStore {
       keyword: input.keyword,
       note: input.note,
       review: input.review,
+      criterionNotes: input.criterionNotes ?? {},
       photoRef: input.photoRef ?? null,
       updatedAt,
     });

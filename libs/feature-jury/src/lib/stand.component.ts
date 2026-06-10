@@ -13,6 +13,7 @@ import { CRITERIA, type Criterion, type ScoreValue } from "@winnovation/domain";
 import {
   AppBarComponent,
   BannerComponent,
+  CRITERION_QUESTIONS,
   IconComponent,
   ScoreInputComponent,
   SyncComponent,
@@ -131,7 +132,11 @@ const LABELS: Record<Criterion, string> = {
               [label]="labels[c]"
               [accent]="color(c)"
               [value]="scores()[c] ?? null"
+              [infoQuestions]="questions[c]"
+              [withNote]="true"
+              [note]="criterionNotes()[c] ?? ''"
               (valueChange)="setScore(c, $event)"
+              (noteChange)="setCriterionNote(c, $event)"
             />
           }
 
@@ -205,6 +210,8 @@ export class StandComponent implements OnInit {
   protected readonly vervolg = signal(false);
   protected readonly photoRef = signal<string | null>(null);
   protected readonly scores = signal<Partial<Record<Criterion, ScoreValue>>>({});
+  protected readonly criterionNotes = signal<Partial<Record<Criterion, string>>>({});
+  protected readonly questions = CRITERION_QUESTIONS;
 
   protected readonly editing = signal(false);
   private announceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -252,6 +259,7 @@ export class StandComponent implements OnInit {
       this.keyword.set(meta.keyword);
       this.note.set(meta.note);
       this.review.set(meta.review);
+      this.criterionNotes.set(meta.criterionNotes ?? {});
       this.photoRef.set(meta.photoRef ?? null);
     }
   }
@@ -280,6 +288,10 @@ export class StandComponent implements OnInit {
     this.scores.update((s) => ({ ...s, [c]: v }));
   }
 
+  protected setCriterionNote(c: Criterion, note: string): void {
+    this.criterionNotes.update((n) => ({ ...n, [c]: note }));
+  }
+
   protected async onPhoto(event: Event): Promise<void> {
     const file = (event.target as HTMLInputElement).files?.[0];
     if (!file) {
@@ -303,6 +315,7 @@ export class StandComponent implements OnInit {
       keyword: this.keyword().trim(),
       note: this.note(),
       review: this.review(),
+      criterionNotes: this.criterionNotes(),
       scores: this.scores() as Record<Criterion, ScoreValue>,
       photoRef: this.photoRef(),
     });
