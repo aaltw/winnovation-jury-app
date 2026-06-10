@@ -320,6 +320,17 @@ export class JuryStore {
     return this.service.getCaptureMeta(event.id, this.judge(), standNr);
   }
 
+  /** Patch this juror's note/review for a captured stand (used while discussing in Afstemmen). */
+  async updateCaptureMeta(
+    standNr: string,
+    patch: Partial<Pick<CaptureMeta, "note" | "review">>,
+  ): Promise<void> {
+    const existing = await this.metaFor(standNr);
+    if (!existing) return;
+    await this.service.saveCaptureMeta({ ...existing, ...patch, updatedAt: this.clock() });
+    this.pushSoon();
+  }
+
   async savePhoto(blob: Blob): Promise<string> {
     const id = crypto.randomUUID();
     await putPhoto(this.db, id, blob);

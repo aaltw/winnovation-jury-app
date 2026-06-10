@@ -173,6 +173,26 @@ interface IncompleteRow {
                         }}</span>
                       }
                     </div>
+                    <div style="margin-top:14px">
+                      <label class="wv-label">Notitie <span class="opt">— privé, voor jezelf</span></label>
+                      <textarea
+                        class="wv-textarea"
+                        rows="2"
+                        placeholder="Korte reden voor je oordeel…"
+                        [value]="metas()[r.standNr]?.note ?? ''"
+                        (input)="onMeta(r.standNr, 'note', $any($event.target).value)"
+                      ></textarea>
+                    </div>
+                    <div style="margin-top:10px">
+                      <label class="wv-label">Review <span class="opt">— feedback voor het team</span></label>
+                      <textarea
+                        class="wv-textarea"
+                        rows="2"
+                        placeholder="Opbouwende tip voor de deelnemers…"
+                        [value]="metas()[r.standNr]?.review ?? ''"
+                        (input)="onMeta(r.standNr, 'review', $any($event.target).value)"
+                      ></textarea>
+                    </div>
                   </div>
                 }
               </div>
@@ -230,6 +250,9 @@ export class ReconcileComponent {
   protected readonly rows = signal<Row[]>([]);
   protected readonly incomplete = signal<IncompleteRow[]>([]);
   protected readonly open = signal<string | null>(null);
+  protected readonly metas = signal<Record<string, { note: string; review: string }>>({});
+  private readonly dirty = new Set<string>();
+  private metaTimer: ReturnType<typeof setTimeout> | null = null;
   private valueMap = new Map<string, number>();
 
   protected readonly me = this.store.judge;
@@ -250,13 +273,23 @@ export class ReconcileComponent {
   private async load(): Promise<void> {
     await this.store.refreshDeelnemers();
     const byStand = new Map(this.store.deelnemers().map((d) => [d.standNr, d]));
-    const keywords = new Map(
+    const metas = new Map(
       await Promise.all(
         this.store
           .deelnemers()
-          .map(
-            async (d) => [d.standNr, (await this.store.metaFor(d.standNr))?.keyword ?? ""] as const,
-          ),
+          .map(async (d) => [d.standNr, await this.store.metaFor(d.standNr)] as const),
+      ),
+    );
+    const keywords = new Map([...metas].map(([nr, m]) => [nr, m?.keyword ?? ""]));
+    this.metas.update((cur) =>
+      Object.fromEntries(
+        [...metas].map(([nr, m]) => [
+          nr,
+          // Keep unsaved local edits over a concurrent reload.
+          this.dirty.has(nr)
+            ? (cur[nr] ?? { note: "", review: "" })
+            : { note: m?.note ?? "", review: m?.review ?? "" },
+        ]),
       ),
     );
 
@@ -341,6 +374,22 @@ export class ReconcileComponent {
   protected colorForStand(standNr: string): string {
     const n = Number.parseInt(standNr, 10) || standNr.length;
     return this.palette[n % this.palette.length];
+  }
+
+  protected onMeta(standNr: string, field: "note" | "review", value: string): void {
+    this.dirty.add(standNr);
+    this.metas.update((m) => ({
+      ...m,
+      [standNr]: { ...(m[standNr] ?? { note: "", review: "" }), [field]: value },
+    }));
+    if (this.metaTimer) clearTimeout(this.metaTimer);
+    this.metaTimer = setTimeout(() => {
+      const cur = this.metas()[standNr];
+      if (!cur) return;
+      void this.store
+        .updateCaptureMeta(standNr, { note: cur.note, review: cur.review })
+        .then(() => this.dirty.delete(standNr));
+    }, 600);
   }
 
   protected toggle(standNr: string): void {
