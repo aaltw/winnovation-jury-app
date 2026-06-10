@@ -1,6 +1,14 @@
+import { NgTemplateOutlet } from "@angular/common";
 import { ChangeDetectionStrategy, Component, effect, inject, signal } from "@angular/core";
 import { Router } from "@angular/router";
-import { CRITERIA, type Criterion, type FinalRow, toCsv } from "@winnovation/domain";
+import {
+  CRITERIA,
+  type CaptureMeta,
+  type Criterion,
+  type FinalRow,
+  type JudgeSlot,
+  toCsv,
+} from "@winnovation/domain";
 import {
   AppBarComponent,
   IconComponent,
@@ -36,7 +44,7 @@ interface IncompleteRow {
 @Component({
   selector: "wn-result",
   standalone: true,
-  imports: [AppBarComponent, IconComponent, PhotoComponent],
+  imports: [AppBarComponent, IconComponent, NgTemplateOutlet, PhotoComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="wv-screen">
@@ -83,7 +91,10 @@ interface IncompleteRow {
                   </div>
                 </div>
               </div>
-              <div style="display:flex;gap:16px;margin-top:16px;position:relative">
+              <div
+                (click)="toggle(w.standNr)"
+                style="display:flex;gap:16px;margin-top:16px;position:relative;cursor:pointer"
+              >
                 @for (pc of w.perCriterion; track pc.criterion) {
                   <div>
                     <div style="font-family:var(--font-display);font-weight:800;font-size:18px;color:#fff">
@@ -98,6 +109,13 @@ interface IncompleteRow {
                 }
               </div>
             </div>
+            @if (expanded() === w.standNr) {
+              <div
+                style="border:1px solid var(--line);border-radius:14px;padding:12px;background:var(--bg-2);margin-bottom:8px"
+              >
+                <ng-container *ngTemplateOutlet="notesPanel; context: { standNr: w.standNr }" />
+              </div>
+            }
           }
 
           <div class="wv-divider-label">
@@ -106,35 +124,47 @@ interface IncompleteRow {
           <div class="wv-list">
             @for (r of rest(); track r.standNr; let i = $index) {
               <div
-                style="display:flex;align-items:center;gap:11px;padding:10px 12px;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:var(--sh-card)"
+                style="background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:var(--sh-card);overflow:hidden"
               >
-                <span
-                  style="font-family:var(--font-display);font-weight:800;font-size:18px;width:26px;text-align:center;color:var(--muted);flex:none"
-                  >{{ i + 2 }}</span
+                <div
+                  (click)="toggle(r.standNr)"
+                  style="display:flex;align-items:center;gap:11px;padding:10px 12px;cursor:pointer"
                 >
-                <wn-photo
-                  [keyword]="r.keyword"
-                  [projectgroep]="r.projectgroep"
-                  [color]="colorForStand(r.standNr)"
-                  [size]="42"
-                  [radius]="11"
-                />
-                <div style="flex:1;min-width:0">
-                  <div style="font-family:var(--font-display);font-weight:700;font-size:15px">
-                    {{ r.keyword || fmt(r.standNr) }}
-                  </div>
-                  <div style="font-size:12px;color:var(--muted)">{{ r.projectgroep }}</div>
-                </div>
-                <div style="text-align:right;flex:none">
-                  <div style="font-family:var(--font-display);font-weight:800;font-size:18px">
-                    {{ r.rawTotal }}
-                  </div>
-                  <div
-                    style="font-size:9.5px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.03em"
+                  <span
+                    style="font-family:var(--font-display);font-weight:800;font-size:18px;width:26px;text-align:center;color:var(--muted);flex:none"
+                    >{{ i + 2 }}</span
                   >
-                    punten
+                  <wn-photo
+                    [keyword]="r.keyword"
+                    [projectgroep]="r.projectgroep"
+                    [color]="colorForStand(r.standNr)"
+                    [size]="42"
+                    [radius]="11"
+                  />
+                  <div style="flex:1;min-width:0">
+                    <div style="font-family:var(--font-display);font-weight:700;font-size:15px">
+                      {{ r.keyword || fmt(r.standNr) }}
+                    </div>
+                    <div style="font-size:12px;color:var(--muted)">{{ r.projectgroep }}</div>
+                  </div>
+                  <div style="text-align:right;flex:none">
+                    <div style="font-family:var(--font-display);font-weight:800;font-size:18px">
+                      {{ r.rawTotal }}
+                    </div>
+                    <div
+                      style="font-size:9.5px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.03em"
+                    >
+                      punten
+                    </div>
                   </div>
                 </div>
+                @if (expanded() === r.standNr) {
+                  <div style="border-top:1px solid var(--line);padding:12px;background:var(--bg-2)">
+                    <ng-container
+                      *ngTemplateOutlet="notesPanel; context: { standNr: r.standNr }"
+                    />
+                  </div>
+                }
               </div>
             }
           </div>
@@ -174,6 +204,10 @@ interface IncompleteRow {
       </div>
 
       <div class="wv-dock bordered">
+        <button class="wv-btn wv-btn-ghost" (click)="shareStory()" style="margin-bottom:10px">
+          <wn-icon name="share" [size]="19" />
+          {{ storyCopied() ? "Gekopieerd — plak in Gemini" : "Juryverhaal (voor Gemini)" }}
+        </button>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
           <button class="wv-btn wv-btn-ghost" (click)="exportCsv()">
             <wn-icon name="download" [size]="19" />
@@ -185,6 +219,42 @@ interface IncompleteRow {
           </button>
         </div>
       </div>
+
+      <ng-template #notesPanel let-standNr="standNr">
+        @for (judge of judges; track judge) {
+          <div style="margin-bottom:10px">
+            <div
+              style="font-size:10.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin-bottom:4px"
+            >
+              {{ judge === myJudge() ? "Jij" : "Jurylid " + judge }}
+            </div>
+            @if (metaOf(standNr, judge); as m) {
+              @if (m.note) {
+                <div style="font-size:13px;line-height:1.5;margin-bottom:3px">
+                  <b style="font-size:11px;color:var(--muted)">Notitie</b> — {{ m.note }}
+                </div>
+              }
+              @if (m.review) {
+                <div style="font-size:13px;line-height:1.5;margin-bottom:3px">
+                  <b style="font-size:11px;color:var(--muted)">Review</b> — {{ m.review }}
+                </div>
+              }
+              @for (c of criteria; track c) {
+                @if (m.criterionNotes?.[c]; as cn) {
+                  <div style="font-size:12.5px;line-height:1.5;color:var(--ink-2)">
+                    <b [style.color]="color(c)" style="font-size:11px">{{ short[c] }}</b> — {{ cn }}
+                  </div>
+                }
+              }
+              @if (!m.note && !m.review && !hasCriterionNotes(m)) {
+                <div style="font-size:12.5px;color:var(--muted)">Geen notities</div>
+              }
+            } @else {
+              <div style="font-size:12.5px;color:var(--muted)">Geen notities</div>
+            }
+          </div>
+        }
+      </ng-template>
     </div>
   `,
 })
@@ -193,9 +263,15 @@ export class ResultComponent {
   private readonly router = inject(Router);
 
   protected readonly short = SHORT;
+  protected readonly criteria = CRITERIA;
+  protected readonly judges: JudgeSlot[] = ["A", "B"];
   protected readonly winner = signal<Winner | null>(null);
   protected readonly rest = signal<RankRow[]>([]);
   protected readonly incomplete = signal<IncompleteRow[]>([]);
+  protected readonly expanded = signal<string | null>(null);
+  protected readonly storyCopied = signal(false);
+  protected readonly myJudge = this.store.judge;
+  private readonly metas = signal<Record<string, Partial<Record<JudgeSlot, CaptureMeta>>>>({});
   private ranked: FinalRow[] = [];
 
   protected fmt = fmtStand;
@@ -220,6 +296,22 @@ export class ResultComponent {
           .map(
             async (d) => [d.standNr, (await this.store.metaFor(d.standNr))?.keyword ?? ""] as const,
           ),
+      ),
+    );
+    this.metas.set(
+      Object.fromEntries(
+        await Promise.all(
+          this.store.deelnemers().map(
+            async (d) =>
+              [
+                d.standNr,
+                {
+                  A: await this.store.metaFor(d.standNr, "A"),
+                  B: await this.store.metaFor(d.standNr, "B"),
+                },
+              ] as const,
+          ),
+        ),
       ),
     );
     const [scoresA, scoresB] = await Promise.all([
@@ -268,6 +360,61 @@ export class ResultComponent {
         onlyJudge: standsA.has(standNr) ? "A" : "B",
       })),
     );
+  }
+
+  protected toggle(standNr: string): void {
+    this.expanded.set(this.expanded() === standNr ? null : standNr);
+  }
+
+  protected metaOf(standNr: string, judge: JudgeSlot): CaptureMeta | undefined {
+    return this.metas()[standNr]?.[judge];
+  }
+
+  protected hasCriterionNotes(m: CaptureMeta): boolean {
+    return Object.values(m.criterionNotes ?? {}).some((n) => !!n);
+  }
+
+  /** Dutch prompt for Gemini: data + instructions for an exciting award-ceremony story. */
+  private buildStoryPrompt(): string {
+    const w = this.winner();
+    const lines: string[] = [];
+    const all = w ? [{ ...w, pos: 1 }, ...this.rest().map((r, i) => ({ ...r, pos: i + 2 }))] : [];
+    for (const r of all) {
+      lines.push(
+        `\n## ${r.pos}. ${r.keyword || fmtStand(r.standNr)} (${r.projectgroep}, ${fmtStand(r.standNr)}) — ${r.rawTotal} punten`,
+      );
+      for (const judge of this.judges) {
+        const m = this.metaOf(r.standNr, judge);
+        if (!m) continue;
+        if (m.note) lines.push(`- Jurylid ${judge}, notitie: ${m.note}`);
+        if (m.review) lines.push(`- Jurylid ${judge}, feedback voor het team: ${m.review}`);
+        for (const c of CRITERIA) {
+          const cn = m.criterionNotes?.[c];
+          if (cn) lines.push(`- Jurylid ${judge}, over ${c}: ${cn}`);
+        }
+      }
+    }
+    return [
+      "Jij bent de jury van Winnovation, een innovatie-wedstrijd voor studententeams.",
+      "Schrijf een kort juryverhaal in het Nederlands om voor te lezen bij de prijsuitreiking (±2 minuten).",
+      "Maak het spannend: bouw op naar de winnaar, die je pas aan het einde onthult.",
+      "Noem elk project met iets oprecht positiefs en verwerk de observaties van de juryleden op een natuurlijke manier — citeer cijfers niet letterlijk.",
+      "Sluit af met een felicitatie aan de winnaar en een compliment aan alle teams.",
+      "\n# Jurydata (gesorteerd op eindklassement, 1 = winnaar)",
+      ...lines,
+    ].join("\n");
+  }
+
+  protected async shareStory(): Promise<void> {
+    const text = this.buildStoryPrompt();
+    const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
+    if (nav.canShare?.({ text })) {
+      await navigator.share({ text, title: "Winnovation juryverhaal" });
+    } else {
+      await navigator.clipboard.writeText(text);
+      this.storyCopied.set(true);
+      setTimeout(() => this.storyCopied.set(false), 4000);
+    }
   }
 
   protected colorForStand(standNr: string): string {
