@@ -66,7 +66,14 @@ import { JuryStore } from "./jury-store";
               <div class="big">{{ store.placedCount() }}</div>
               <div class="lbl">Geplaatst</div>
             </div>
-            <div class="wv-stat flag">
+            <div
+              class="wv-stat flag"
+              (click)="go('/review')"
+              style="cursor:pointer"
+              role="button"
+              tabindex="0"
+              (keydown.enter)="go('/review')"
+            >
               <div class="big">{{ store.driftItems().length }}</div>
               <div class="lbl">Drift-vlaggen</div>
             </div>
