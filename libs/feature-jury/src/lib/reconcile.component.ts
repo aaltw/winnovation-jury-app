@@ -13,6 +13,7 @@ import {
   type JudgeSlot,
   type Score,
   type ScoreValue,
+  bracketingAnchors,
 } from "@winnovation/domain";
 import {
   AppBarComponent,
@@ -396,6 +397,13 @@ export class ReconcileComponent {
     const next = Math.min(5, Math.max(1, cur + delta));
     if (next === cur) return;
     await this.store.updateScoreValue(criterion, standNr, next as ScoreValue);
+    // Re-sort the ranking so the disagreement list reflects the new score.
+    const others = (await this.store.placedFor(criterion)).filter((p) => p.standNr !== standNr);
+    await this.store.applyPlacement(
+      criterion,
+      standNr,
+      bracketingAnchors(others, next as ScoreValue).index,
+    );
     await this.load();
   }
 
