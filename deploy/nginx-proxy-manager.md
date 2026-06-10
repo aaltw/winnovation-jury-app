@@ -24,6 +24,17 @@ whose advanced config strips the `/api` prefix (the sync-api routes have **no** 
 
 ## Steps
 
+> **Where to build.** The `pnpm nx build …` and `docker build …` commands below need the repo +
+> Node/pnpm. Either **clone the repo on the server** and run everything there (simplest), or
+> build on your own machine and ship the artifacts: the frontend is plain files (step 1 already
+> copies them), and the sync-api image can travel without a registry:
+>
+> ```sh
+> # on your machine
+> pnpm nx build sync-api && docker build -f apps/sync-api/Dockerfile -t winnovation-sync-api .
+> docker save winnovation-sync-api | ssh <server> docker load
+> ```
+
 ### 1. Build the frontend
 
 ```sh
@@ -85,8 +96,14 @@ proxy_http_version 1.1;
 proxy_set_header Connection '';
 ```
 
-Verify: `curl -X POST https://winnovation.wouterhomelab.com/api/events …` should mint an event
-(NPM strips `/api` → sync-api sees `POST /events`).
+Verify (NPM strips `/api` → sync-api sees `POST /events`; should return JSON with an `id` and
+`eventCode`):
+
+```sh
+curl -s -X POST https://winnovation.wouterhomelab.com/api/events \
+  -H 'content-type: application/json' \
+  -d '{"name":"Smoke test","date":"2026-06-10"}'
+```
 
 > **Alternative (config-as-code).** If you prefer not to use an NPM Custom Location, skip step 5
 > and put the split in `frontend.nginx.conf` instead — add an `/api` block that strips the prefix
@@ -111,3 +128,24 @@ Verify: `curl -X POST https://winnovation.wouterhomelab.com/api/events …` shou
   (not closed after a few seconds). A score on the other device appears live without navigation.
 - Restart the sync-api container (`docker restart winnovation-sync-api`) → data persists
   (volume).
+
+## Updating to a new version
+
+```sh
+git pull
+
+# frontend: rebuild + replace the served files (container picks them up, it's a bind mount)
+pnpm nx build jury-app
+rsync -a --delete dist/apps/jury-app/browser/ /srv/winnovation-jury/browser/
+
+# sync-api: rebuild image + recreate container (data survives on the named volume)
+pnpm nx build sync-api
+docker build -f apps/sync-api/Dockerfile -t winnovation-sync-api .
+docker rm -f winnovation-sync-api
+docker run -d --name winnovation-sync-api -p 8787:8787 \
+  -v winnovation-sync-data:/app/data -e DB_PATH=/app/data/jury.db \
+  winnovation-sync-api
+```
+
+Clients pick the frontend up on next load — the service worker fetches the new version in the
+background and applies it on the following visit (or after a manual refresh).
