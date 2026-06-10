@@ -224,7 +224,7 @@ interface Row {
             </div>
             <button
               [class]="stillDrift(target) ? 'wv-btn wv-btn-ghost' : 'wv-btn wv-btn-primary'"
-              (click)="stillDrift(target) ? go('/compare') : resolve.set(null)"
+              (click)="stillDrift(target) ? replaceIn(target) : resolve.set(null)"
             >
               <wn-icon [name]="stillDrift(target) ? 'scale' : 'check'" [size]="19" />
               {{ stillDrift(target) ? "Liever herplaatsen in Vergelijken" : "Klaar" }}
@@ -372,5 +372,11 @@ export class ReviewComponent {
 
   protected go(route: string): void {
     void this.router.navigate([route]);
+  }
+
+  protected replaceIn(standNr: string): void {
+    void this.router.navigate(["/compare"], {
+      queryParams: { standNr, criterion: this.criterion() },
+    });
   }
 }

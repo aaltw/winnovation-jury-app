@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from "@angular/core";
-import { Router } from "@angular/router";
+import { ActivatedRoute, Router } from "@angular/router";
 import {
   type Anchors,
   CRITERIA,
@@ -268,6 +268,14 @@ export class CompareComponent {
   protected fmt = fmtStand;
   private readonly palette = ["#4B3BF5", "#FF5A3C", "#00A7C4", "#06BE7E", "#F5A300", "#8A5BE0"];
 
+  // Arriving from "Liever herplaatsen" on Nakijken: re-open this already-placed score.
+  private readonly replace = (() => {
+    const qp = inject(ActivatedRoute).snapshot.queryParamMap;
+    const standNr = qp.get("standNr");
+    const criterion = qp.get("criterion") as Criterion | null;
+    return standNr && criterion && CRITERIA.includes(criterion) ? { standNr, criterion } : null;
+  })();
+
   protected colorForStand(standNr: string): string {
     const n = Number.parseInt(standNr, 10) || standNr.length;
     return this.palette[n % this.palette.length];
@@ -294,6 +302,14 @@ export class CompareComponent {
           CRITERIA.indexOf(a.criterion) - CRITERIA.indexOf(b.criterion),
       )
       .map((s) => ({ standNr: s.standNr, criterion: s.criterion, value: s.value }));
+    if (this.replace) {
+      const score = all.find(
+        (s) => s.standNr === this.replace?.standNr && s.criterion === this.replace?.criterion,
+      );
+      if (score) {
+        tasks.unshift({ standNr: score.standNr, criterion: score.criterion, value: score.value });
+      }
+    }
     this.queue.set(tasks);
     await this.advance();
   }
