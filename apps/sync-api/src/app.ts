@@ -48,6 +48,15 @@ export function createApp(
     });
   });
 
+  app.delete("/events/:eventId", (c) => {
+    const eventId = c.req.param("eventId");
+    // Same guard as /changes: the event code is the shared secret.
+    const event = store.findEventByCode(c.req.header("x-event-code") ?? "");
+    if (!event || event.id !== eventId) return c.json({ error: "forbidden" }, 403);
+    store.deleteEvent(eventId);
+    return c.json({ ok: true });
+  });
+
   // Lightweight guard: the event code is the shared secret (v1; harden later).
   app.use("/events/:eventId/changes", async (c, next) => {
     const eventId = c.req.param("eventId");

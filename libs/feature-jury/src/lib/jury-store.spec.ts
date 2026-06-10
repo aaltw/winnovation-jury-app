@@ -66,6 +66,7 @@ const offlineRemote: Remote = {
     get: () => Promise.reject(new Error("offline")),
   }),
   listEvents: () => Promise.resolve([]),
+  deleteEvent: () => Promise.reject(new Error("offline")),
   openChangeStream: () => ({ close() {} }),
 };
 
@@ -107,6 +108,12 @@ function fakeBackend() {
           projectCount: [...deelnemers.values()].filter((d) => d.eventId === e.id).length,
         })),
       ),
+    deleteEvent: (eventId) => {
+      for (const [code, info] of events) if (info.id === eventId) events.delete(code);
+      for (const map of [deelnemers, scores, captureMeta] as Map<string, { eventId: string }>[])
+        for (const [key, row] of map) if (row.eventId === eventId) map.delete(key);
+      return Promise.resolve();
+    },
     openChangeStream: () => ({ close() {} }),
     transportFor: (code) => {
       const eventId = () => {

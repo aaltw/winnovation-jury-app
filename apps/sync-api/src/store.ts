@@ -47,6 +47,7 @@ export interface SyncStore {
   applyChanges(eventId: string, changes: ChangeSet): void;
   changesSince(eventId: string, since: number): ChangeSet;
   listEvents(): EventListItem[];
+  deleteEvent(eventId: string): void;
 }
 
 function lww<T extends { updatedAt: number }>(map: Map<string, T>, key: string, row: T): void {
@@ -84,6 +85,16 @@ export class InMemoryStore implements SyncStore {
       scores: pick(this.scores),
       captureMeta: pick(this.captureMeta),
     };
+  }
+
+  deleteEvent(eventId: string): void {
+    this.events.delete(eventId);
+    const prune = <T extends { eventId: string }>(map: Map<string, T>) => {
+      for (const [key, row] of map) if (row.eventId === eventId) map.delete(key);
+    };
+    prune(this.deelnemers);
+    prune(this.scores);
+    prune(this.captureMeta);
   }
 
   listEvents(): EventListItem[] {

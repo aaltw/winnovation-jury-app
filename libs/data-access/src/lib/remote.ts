@@ -64,6 +64,7 @@ export interface Remote {
   joinEvent(code: string): Promise<RemoteEventInfo | null>;
   transportFor(code: () => string): Transport;
   listEvents(): Promise<RemoteEventListItem[]>;
+  deleteEvent(eventId: string, code: string): Promise<void>;
   openChangeStream(
     eventId: string,
     code: string,
@@ -113,6 +114,14 @@ export class RemoteGateway implements Remote {
     const res = await this.fetchImpl(`${this.base}/events`);
     if (!res.ok) throw new Error(`list events → ${res.status}`);
     return res.json() as Promise<RemoteEventListItem[]>;
+  }
+
+  async deleteEvent(eventId: string, code: string): Promise<void> {
+    const res = await this.fetchImpl(`${this.base}/events/${encodeURIComponent(eventId)}`, {
+      method: "DELETE",
+      headers: { "x-event-code": code },
+    });
+    if (!res.ok) throw new Error(`delete event → ${res.status}`);
   }
 
   openChangeStream(

@@ -125,6 +125,22 @@ export class JuryStore {
     this.events.set(await this.remote.listEvents().catch(() => []));
   }
 
+  /** Remove an event everywhere: server (best-effort) + local cache, then refresh the list. */
+  async deleteEvent(eventId: string, eventCode: string): Promise<void> {
+    await this.remote.deleteEvent(eventId, eventCode).catch(() => {
+      // Offline or server-side failure: still clear the local copy.
+    });
+    await Promise.all([
+      this.db.events.delete(eventId),
+      this.db.deelnemers.where("eventId").equals(eventId).delete(),
+      this.db.scores.where("eventId").equals(eventId).delete(),
+      this.db.captureMeta.where("eventId").equals(eventId).delete(),
+      this.db.syncMeta.delete(eventId),
+    ]);
+    if (this.event()?.id === eventId) this.leaveEvent();
+    await this.refreshEventList();
+  }
+
   setJudge(slot: JudgeSlot): void {
     this.judge.set(slot);
   }

@@ -81,6 +81,16 @@ export class SqliteStore implements SyncStore {
     };
   }
 
+  deleteEvent(eventId: string): void {
+    const tx = this.db.transaction(() => {
+      this.db.prepare("DELETE FROM captureMeta WHERE eventId = ?").run(eventId);
+      this.db.prepare("DELETE FROM scores WHERE eventId = ?").run(eventId);
+      this.db.prepare("DELETE FROM deelnemers WHERE eventId = ?").run(eventId);
+      this.db.prepare("DELETE FROM events WHERE id = ?").run(eventId);
+    });
+    tx();
+  }
+
   listEvents(): EventListItem[] {
     return this.db
       .prepare(
