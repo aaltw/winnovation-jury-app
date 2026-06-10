@@ -35,6 +35,7 @@ const PATHS: Record<string, string> = {
   inbox: "M4 13l2.5-7h11L20 13v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1zM4 13h4l1 2h6l1-2h4",
   sliders: "M4 8h10M18 8h2M4 16h2M10 16h10M14 6v4M6 14v4",
   pin: "M12 21s7-6.5 7-12a7 7 0 1 0-14 0c0 5.5 7 12 7 12zM12 11.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z",
+  selector: "M8 9l4-4 4 4M8 15l4 4 4-4",
   trash:
     "M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13M10 11v6M14 11v6",
 };
