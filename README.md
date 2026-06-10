@@ -80,6 +80,23 @@ HMR / live-reload socket — that `wss://` connection can't cross the TLS tunnel
 manually instead. This is a dev-server convenience for demos, **not** the production path (see
 Deploy below).
 
+### Local testing of a production build
+
+The dev server disables the service worker, so PWA behaviour (install prompt, offline,
+auto-update, splash) can only be tested against a **production build**. `tools/prod-server.mjs`
+is a zero-dependency stand-in for the production reverse proxy — static files + SPA fallback +
+`/api` → sync-api with the prefix stripped:
+
+```sh
+pnpm nx serve sync-api                                   # :8787
+pnpm nx build jury-app
+node tools/prod-server.mjs dist/apps/jury-app/browser    # :4300 (PORT env to change)
+```
+
+Point ngrok at `:4300` as above to install the PWA on a phone. After a code change, rerun the
+build — installed clients pick the new version up automatically on next open (the app
+activates + reloads on `VERSION_READY`).
+
 ---
 
 ## Deploy
