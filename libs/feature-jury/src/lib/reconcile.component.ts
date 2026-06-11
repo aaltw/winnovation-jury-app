@@ -71,6 +71,17 @@ interface IncompleteRow {
             beide telefoons. Eens? Leg dan de eindstand vast.
           </p>
 
+          @if (!rows().length) {
+            <div
+              style="padding:22px 16px;border-radius:14px;background:#fff;border:1px dashed var(--line-2);text-align:center"
+            >
+              <div style="font-weight:700;font-size:14.5px;margin-bottom:4px">Nog niets af te stemmen</div>
+              <div style="font-size:13px;color:var(--muted);line-height:1.5">
+                Hier verschijnen projecten zodra <b>beide</b> juryleden ze gescoord en geplaatst
+                hebben. Nu staat hier niets — jurylid {{ other() }} is waarschijnlijk nog bezig.
+              </div>
+            </div>
+          }
           <div class="wv-list">
             @for (r of rows(); track r.standNr; let i = $index) {
               <div
@@ -110,7 +121,9 @@ interface IncompleteRow {
                       </div>
                     </div>
                   </div>
-                  @if (r.hot) {
+                  @if (discussed().has(r.standNr)) {
+                    <span class="wv-chip wv-chip-mint" style="flex:none">besproken</span>
+                  } @else if (r.hot) {
                     <span class="wv-chip wv-chip-amber" style="flex:none">bespreken</span>
                   } @else {
                     <wn-icon
@@ -194,6 +207,16 @@ interface IncompleteRow {
                         (input)="onMeta(r.standNr, 'review', $any($event.target).value)"
                       ></textarea>
                     </div>
+                    <button
+                      type="button"
+                      (click)="markDiscussed(r.standNr)"
+                      [class.on]="discussed().has(r.standNr)"
+                      style="margin-top:12px;width:100%;padding:9px 12px;border-radius:11px;border:1px solid var(--line-2);background:#fff;font-weight:700;font-size:13px;color:var(--ink-2);cursor:pointer"
+                      [style.background]="discussed().has(r.standNr) ? 'var(--mint-bg, #E6F7EF)' : '#fff'"
+                      [style.border-color]="discussed().has(r.standNr) ? 'var(--mint, #06BE7E)' : 'var(--line-2)'"
+                    >
+                      {{ discussed().has(r.standNr) ? "✓ Besproken" : "Markeer als besproken" }}
+                    </button>
                     @if (otherReviews()[r.standNr]; as theirReview) {
                       <div style="margin-top:10px">
                         <label class="wv-label"
@@ -265,6 +288,7 @@ export class ReconcileComponent {
   protected readonly open = signal<string | null>(null);
   protected readonly metas = signal<Record<string, { note: string; review: string }>>({});
   protected readonly otherReviews = signal<Record<string, string>>({});
+  protected readonly discussed = signal<ReadonlySet<string>>(new Set());
   private readonly dirty = new Set<string>();
   private metaTimer: ReturnType<typeof setTimeout> | null = null;
   private valueMap = new Map<string, number>();
@@ -282,6 +306,31 @@ export class ReconcileComponent {
       this.store.revision();
       void this.load();
     });
+    // "Besproken" is a per-device checklist — localStorage, not synced.
+    effect(() => {
+      const ev = this.store.event();
+      if (!ev) return;
+      try {
+        const raw = localStorage.getItem(`wn-discussed-${ev.id}`);
+        this.discussed.set(new Set<string>(raw ? JSON.parse(raw) : []));
+      } catch {
+        this.discussed.set(new Set());
+      }
+    });
+  }
+
+  protected markDiscussed(standNr: string): void {
+    const next = new Set(this.discussed());
+    if (next.has(standNr)) next.delete(standNr);
+    else next.add(standNr);
+    this.discussed.set(next);
+    const ev = this.store.event();
+    if (!ev) return;
+    try {
+      localStorage.setItem(`wn-discussed-${ev.id}`, JSON.stringify([...next]));
+    } catch {
+      // storage full/unavailable — the in-memory state still works for this session
+    }
   }
 
   private async load(): Promise<void> {
