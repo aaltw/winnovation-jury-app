@@ -59,7 +59,7 @@ interface IncompleteRow {
         <button slot="left" class="wv-appbar-btn" (click)="go('/home')">
           <wn-icon name="chevLeft" [size]="20" />
         </button>
-        <wn-sync slot="right" state="syncing" />
+        <wn-sync slot="right" [state]="store.syncState()" />
       </wn-app-bar>
 
       <div class="wv-scroll">
@@ -255,7 +255,7 @@ interface IncompleteRow {
   `,
 })
 export class ReconcileComponent {
-  private readonly store = inject(JuryStore);
+  protected readonly store = inject(JuryStore);
   private readonly router = inject(Router);
 
   protected readonly criteria = CRITERIA;

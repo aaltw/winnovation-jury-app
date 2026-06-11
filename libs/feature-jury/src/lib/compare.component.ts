@@ -49,7 +49,7 @@ const LABELS: Record<Criterion, string> = {
           <wn-icon name="chevLeft" [size]="20" />
         </button>
         <h2 style="font-size:19px">Vergelijken</h2>
-        <wn-sync state="synced" />
+        <wn-sync [state]="store.syncState()" />
       </div>
 
       @if (current(); as t) {
@@ -242,7 +242,7 @@ const LABELS: Record<Criterion, string> = {
   `,
 })
 export class CompareComponent {
-  private readonly store = inject(JuryStore);
+  protected readonly store = inject(JuryStore);
   private readonly router = inject(Router);
 
   protected readonly criteria = CRITERIA;
