@@ -45,7 +45,7 @@ interface Row {
         <button slot="left" class="wv-appbar-btn" (click)="go('/home')">
           <wn-icon name="chevLeft" [size]="20" />
         </button>
-        <wn-sync slot="right" state="synced" />
+        <wn-sync slot="right" [state]="store.syncState()" />
       </wn-app-bar>
 
       <div style="display:flex;gap:6px;padding:0 16px 12px;overflow-x:auto">
@@ -236,7 +236,7 @@ interface Row {
   `,
 })
 export class ReviewComponent {
-  private readonly store = inject(JuryStore);
+  protected readonly store = inject(JuryStore);
   private readonly router = inject(Router);
 
   protected readonly criteria = CRITERIA;

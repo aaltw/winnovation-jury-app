@@ -50,7 +50,7 @@ const LABELS: Record<Criterion, string> = {
         <button slot="left" class="wv-appbar-btn" (click)="back()">
           <wn-icon name="chevLeft" [size]="20" />
         </button>
-        <wn-sync slot="right" state="synced" />
+        <wn-sync slot="right" [state]="store.syncState()" />
       </wn-app-bar>
 
       <div class="wv-scroll">
@@ -118,7 +118,9 @@ const LABELS: Record<Criterion, string> = {
               >
                 {{ photoRef() ? "Foto vastgelegd" : "Foto maken" }}
               </div>
-              <div style="font-size:12px;color:var(--muted)">optioneel — helpt je herinneren</div>
+              <div style="font-size:12px;color:var(--muted)">
+                optioneel — blijft alleen op dit toestel
+              </div>
             </span>
             @if (photoRef()) {
               <wn-icon name="check" [size]="20" />
@@ -197,7 +199,7 @@ const LABELS: Record<Criterion, string> = {
   `,
 })
 export class StandComponent implements OnInit {
-  private readonly store = inject(JuryStore);
+  protected readonly store = inject(JuryStore);
   private readonly router = inject(Router);
 
   protected readonly criteria = CRITERIA;

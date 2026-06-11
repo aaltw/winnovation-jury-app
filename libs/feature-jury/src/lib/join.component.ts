@@ -139,14 +139,17 @@ const STEPS: ReadonlyArray<readonly [string, string, string]> = [
           <label class="wv-label" style="color:rgba(255,255,255,.55)">Eventcode</label>
           <input
             class="wv-input big"
-            [(ngModel)]="code"
-            (ngModelChange)="error.set(false)"
+            [ngModel]="code"
+            (ngModelChange)="onCode($any($event))"
             placeholder="WIN-26"
             autocapitalize="characters"
             style="background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.16);color:#fff;letter-spacing:0.08em;text-align:center;text-transform:uppercase"
           />
           @if (error()) {
-            <p style="color:#FF8A73;font-size:13px;font-weight:600;margin:8px 2px 0">Onbekende code</p>
+            <p style="color:#FF8A73;font-size:13px;font-weight:600;margin:8px 2px 0">
+              Code niet gevonden — controleer de code (en je internetverbinding bij een nieuw
+              event).
+            </p>
           }
         </div>
 
@@ -296,6 +299,11 @@ export class JoinComponent implements OnInit {
       return;
     }
     await this.store.refreshEventList();
+  }
+
+  protected onCode(value: string): void {
+    this.code = value.toUpperCase();
+    this.error.set(false);
   }
 
   protected chooseEvent(code: string): void {

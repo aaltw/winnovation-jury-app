@@ -59,7 +59,7 @@ interface IncompleteRow {
         <button slot="left" class="wv-appbar-btn" (click)="go('/home')">
           <wn-icon name="chevLeft" [size]="20" />
         </button>
-        <wn-sync slot="right" state="syncing" />
+        <wn-sync slot="right" [state]="store.syncState()" />
       </wn-app-bar>
 
       <div class="wv-scroll">
@@ -71,6 +71,17 @@ interface IncompleteRow {
             beide telefoons. Eens? Leg dan de eindstand vast.
           </p>
 
+          @if (!rows().length) {
+            <div
+              style="padding:22px 16px;border-radius:14px;background:#fff;border:1px dashed var(--line-2);text-align:center"
+            >
+              <div style="font-weight:700;font-size:14.5px;margin-bottom:4px">Nog niets af te stemmen</div>
+              <div style="font-size:13px;color:var(--muted);line-height:1.5">
+                Hier verschijnen projecten zodra <b>beide</b> juryleden ze gescoord en geplaatst
+                hebben. Nu staat hier niets — jurylid {{ other() }} is waarschijnlijk nog bezig.
+              </div>
+            </div>
+          }
           <div class="wv-list">
             @for (r of rows(); track r.standNr; let i = $index) {
               <div
@@ -110,7 +121,9 @@ interface IncompleteRow {
                       </div>
                     </div>
                   </div>
-                  @if (r.hot) {
+                  @if (discussed().has(r.standNr)) {
+                    <span class="wv-chip wv-chip-mint" style="flex:none">besproken</span>
+                  } @else if (r.hot) {
                     <span class="wv-chip wv-chip-amber" style="flex:none">bespreken</span>
                   } @else {
                     <wn-icon
@@ -169,9 +182,13 @@ interface IncompleteRow {
                             +
                           </button>
                         </span>
-                        <span style="font-weight:800;font-family:var(--font-display);color:var(--ink-2)">{{
-                          val(r.standNr, c, other())
-                        }}</span>
+                        <span
+                          style="font-weight:800;font-family:var(--font-display);color:var(--ink-2);padding:2px 6px;border-radius:6px;transition:background .4s"
+                          [style.background]="
+                            flash().has(other() + '|' + r.standNr + '|' + c) ? '#FFE3DC' : 'transparent'
+                          "
+                          >{{ val(r.standNr, c, other()) }}</span
+                        >
                       }
                     </div>
                     <div style="margin-top:14px">
@@ -194,6 +211,16 @@ interface IncompleteRow {
                         (input)="onMeta(r.standNr, 'review', $any($event.target).value)"
                       ></textarea>
                     </div>
+                    <button
+                      type="button"
+                      (click)="markDiscussed(r.standNr)"
+                      [class.on]="discussed().has(r.standNr)"
+                      style="margin-top:12px;width:100%;padding:9px 12px;border-radius:11px;border:1px solid var(--line-2);background:#fff;font-weight:700;font-size:13px;color:var(--ink-2);cursor:pointer"
+                      [style.background]="discussed().has(r.standNr) ? 'var(--mint-bg, #E6F7EF)' : '#fff'"
+                      [style.border-color]="discussed().has(r.standNr) ? 'var(--mint, #06BE7E)' : 'var(--line-2)'"
+                    >
+                      {{ discussed().has(r.standNr) ? "✓ Besproken" : "Markeer als besproken" }}
+                    </button>
                     @if (otherReviews()[r.standNr]; as theirReview) {
                       <div style="margin-top:10px">
                         <label class="wv-label"
@@ -255,7 +282,7 @@ interface IncompleteRow {
   `,
 })
 export class ReconcileComponent {
-  private readonly store = inject(JuryStore);
+  protected readonly store = inject(JuryStore);
   private readonly router = inject(Router);
 
   protected readonly criteria = CRITERIA;
@@ -265,6 +292,9 @@ export class ReconcileComponent {
   protected readonly open = signal<string | null>(null);
   protected readonly metas = signal<Record<string, { note: string; review: string }>>({});
   protected readonly otherReviews = signal<Record<string, string>>({});
+  protected readonly discussed = signal<ReadonlySet<string>>(new Set());
+  protected readonly flash = signal<ReadonlySet<string>>(new Set());
+  private flashTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly dirty = new Set<string>();
   private metaTimer: ReturnType<typeof setTimeout> | null = null;
   private valueMap = new Map<string, number>();
@@ -282,6 +312,31 @@ export class ReconcileComponent {
       this.store.revision();
       void this.load();
     });
+    // "Besproken" is a per-device checklist — localStorage, not synced.
+    effect(() => {
+      const ev = this.store.event();
+      if (!ev) return;
+      try {
+        const raw = localStorage.getItem(`wn-discussed-${ev.id}`);
+        this.discussed.set(new Set<string>(raw ? JSON.parse(raw) : []));
+      } catch {
+        this.discussed.set(new Set());
+      }
+    });
+  }
+
+  protected markDiscussed(standNr: string): void {
+    const next = new Set(this.discussed());
+    if (next.has(standNr)) next.delete(standNr);
+    else next.add(standNr);
+    this.discussed.set(next);
+    const ev = this.store.event();
+    if (!ev) return;
+    try {
+      localStorage.setItem(`wn-discussed-${ev.id}`, JSON.stringify([...next]));
+    } catch {
+      // storage full/unavailable — the in-memory state still works for this session
+    }
   }
 
   private async load(): Promise<void> {
@@ -328,6 +383,7 @@ export class ReconcileComponent {
     ]);
     const standsA = new Set(scoresA.map((s) => s.standNr));
     const standsB = new Set(scoresB.map((s) => s.standNr));
+    const prev = this.valueMap;
     this.valueMap = new Map<string, number>();
     for (const s of [
       ...scoresA.map((s) => ["A", s] as const),
@@ -335,6 +391,22 @@ export class ReconcileComponent {
     ]) {
       this.valueMap.set(`${s[0]}|${s[1].standNr}|${s[1].criterion}`, s[1].value);
     }
+    // Flash the other juror's values that changed since the last load (live edits).
+    if (prev.size) {
+      const changed = new Set<string>();
+      const them = this.other();
+      for (const [key, value] of this.valueMap) {
+        if (key.startsWith(`${them}|`) && prev.has(key) && prev.get(key) !== value) {
+          changed.add(key);
+        }
+      }
+      if (changed.size) {
+        this.flash.set(changed);
+        if (this.flashTimer) clearTimeout(this.flashTimer);
+        this.flashTimer = setTimeout(() => this.flash.set(new Set()), 1500);
+      }
+    }
+
     const pts = (scores: Score[], standNr: string): number =>
       scores
         .filter((s) => s.standNr === standNr && s.rankPos !== null)
@@ -406,6 +478,7 @@ export class ReconcileComponent {
     if (cur === 0) return;
     const next = Math.min(5, Math.max(1, cur + delta));
     if (next === cur) return;
+    navigator.vibrate?.(15);
     await this.store.updateScoreValue(criterion, standNr, next as ScoreValue);
     // Re-sort the ranking so the disagreement list reflects the new score.
     const others = (await this.store.placedFor(criterion)).filter((p) => p.standNr !== standNr);

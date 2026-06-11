@@ -1,4 +1,4 @@
-import { Injectable, signal } from "@angular/core";
+import { Injectable, computed, signal } from "@angular/core";
 import {
   type ChangeStreamHandle,
   type ConnectionState,
@@ -115,6 +115,17 @@ export class JuryStore {
   readonly events = signal<RemoteEventListItem[]>([]);
   readonly revision = signal(0);
   readonly connection = signal<ConnectionState>("offline");
+  /** Connection mapped to the UI pill states ("synced" | "syncing" | "offline"). */
+  readonly syncState = computed(() => {
+    switch (this.connection()) {
+      case "live":
+        return "synced" as const;
+      case "connecting":
+        return "syncing" as const;
+      default:
+        return "offline" as const;
+    }
+  });
 
   private stream: ChangeStreamHandle | null = null;
   private liveTick: Promise<void> = Promise.resolve();
