@@ -30,6 +30,14 @@ interface RankRow {
   keyword: string;
   projectgroep: string;
   rawTotal: number;
+  pos: number;
+  tied: boolean;
+}
+interface CritWinner {
+  criterion: Criterion;
+  standNr: string;
+  keyword: string;
+  projectgroep: string;
 }
 interface Winner extends RankRow {
   perCriterion: { criterion: Criterion; total: number }[];
@@ -70,7 +78,7 @@ interface IncompleteRow {
                 style="display:inline-flex;align-items:center;gap:7px;background:var(--coral);color:#fff;padding:5px 12px;border-radius:999px;font-size:12px;font-weight:800;letter-spacing:.03em"
               >
                 <wn-icon name="trophy" [size]="14" />
-                WINNAAR
+                {{ w.tied ? "GEDEELDE WINNAAR" : "WINNAAR" }}
               </div>
               <div style="display:flex;align-items:center;gap:13px;margin-top:16px;position:relative">
                 <wn-photo
@@ -118,6 +126,36 @@ interface IncompleteRow {
             }
           }
 
+          @if (critWinners().length) {
+            <div class="wv-divider-label">
+              <span class="t">Beste per criterium</span><span class="ln"></span>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+              @for (cw of critWinners(); track cw.criterion) {
+                <div
+                  style="display:flex;align-items:center;gap:9px;padding:9px 10px;background:#fff;border:1px solid var(--line);border-radius:12px;min-width:0"
+                >
+                  <span
+                    [style.background]="color(cw.criterion)"
+                    style="width:9px;height:9px;border-radius:3px;flex:none"
+                  ></span>
+                  <div style="min-width:0">
+                    <div
+                      style="font-size:9.5px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;color:var(--muted)"
+                    >
+                      {{ short[cw.criterion] }}
+                    </div>
+                    <div
+                      style="font-family:var(--font-display);font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"
+                    >
+                      {{ cw.keyword || fmt(cw.standNr) }}
+                    </div>
+                  </div>
+                </div>
+              }
+            </div>
+          }
+
           <div class="wv-divider-label">
             <span class="t">Eindklassement</span><span class="ln"></span>
           </div>
@@ -131,9 +169,18 @@ interface IncompleteRow {
                   style="display:flex;align-items:center;gap:11px;padding:10px 12px;cursor:pointer"
                 >
                   <span
-                    style="font-family:var(--font-display);font-weight:800;font-size:18px;width:26px;text-align:center;color:var(--muted);flex:none"
-                    >{{ i + 2 }}</span
+                    style="width:26px;text-align:center;flex:none"
                   >
+                    <span
+                      style="font-family:var(--font-display);font-weight:800;font-size:18px;color:var(--muted)"
+                      >{{ r.pos }}</span
+                    >
+                    @if (r.tied) {
+                      <span style="display:block;font-size:8.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.02em"
+                        >gedeeld</span
+                      >
+                    }
+                  </span>
                   <wn-photo
                     [keyword]="r.keyword"
                     [projectgroep]="r.projectgroep"
@@ -267,6 +314,7 @@ export class ResultComponent {
   protected readonly judges: JudgeSlot[] = ["A", "B"];
   protected readonly winner = signal<Winner | null>(null);
   protected readonly rest = signal<RankRow[]>([]);
+  protected readonly critWinners = signal<CritWinner[]>([]);
   protected readonly incomplete = signal<IncompleteRow[]>([]);
   protected readonly expanded = signal<string | null>(null);
   protected readonly storyCopied = signal(false);
@@ -335,22 +383,48 @@ export class ResultComponent {
     const { ranked, incomplete } = await this.store.finalRanking();
     this.ranked = ranked;
 
-    const row = (r: FinalRow): RankRow => ({
+    // Competition ranking on `overall` (1, 2, 2, 4) so ties are visible.
+    const positions = ranked.map((r, i, arr) =>
+      i > 0 && r.overall === arr[i - 1].overall ? 0 : i + 1,
+    );
+    for (let i = 1; i < positions.length; i++) {
+      if (positions[i] === 0) positions[i] = positions[i - 1];
+    }
+    const isTied = (i: number): boolean =>
+      (i > 0 && ranked[i].overall === ranked[i - 1].overall) ||
+      (i < ranked.length - 1 && ranked[i].overall === ranked[i + 1].overall);
+
+    const row = (r: FinalRow, i: number): RankRow => ({
       standNr: r.standNr,
       keyword: keywords.get(r.standNr) ?? "",
       projectgroep: byStand.get(r.standNr)?.projectgroep ?? "",
       rawTotal: r.rawTotal,
+      pos: positions[i],
+      tied: isTied(i),
     });
 
     if (ranked.length) {
       this.winner.set({
-        ...row(ranked[0]),
+        ...row(ranked[0], 0),
         perCriterion: CRITERIA.map((c) => ({
           criterion: c,
           total: combined(ranked[0].standNr, c),
         })),
       });
-      this.rest.set(ranked.slice(1).map(row));
+      this.rest.set(ranked.slice(1).map((r, i) => row(r, i + 1)));
+      this.critWinners.set(
+        CRITERIA.map((c) => {
+          const best = ranked.reduce((a, b) =>
+            b.mergedByCriterion[c] < a.mergedByCriterion[c] ? b : a,
+          );
+          return {
+            criterion: c,
+            standNr: best.standNr,
+            keyword: keywords.get(best.standNr) ?? "",
+            projectgroep: byStand.get(best.standNr)?.projectgroep ?? "",
+          };
+        }),
+      );
     }
     this.incomplete.set(
       incomplete.map((standNr) => ({
