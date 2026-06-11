@@ -125,9 +125,18 @@ body {
   padding-right: 20px;
 }
 
-/* Scrollable screen body */
+/* Join screen (dark, no dock) — fills the dynamic viewport, may grow */
+.wn-join-screen {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* Scrollable screen body — exactly one viewport tall so the dock pins to the
+   bottom and .wv-scroll scrolls. dvh tracks the Android URL bar; vh is the
+   fallback for older engines. */
 .wv-screen {
-  flex: 1;
+  height: 100vh;
+  height: 100dvh;
   min-height: 0;
   display: flex;
   flex-direction: column;
