@@ -182,9 +182,13 @@ interface IncompleteRow {
                             +
                           </button>
                         </span>
-                        <span style="font-weight:800;font-family:var(--font-display);color:var(--ink-2)">{{
-                          val(r.standNr, c, other())
-                        }}</span>
+                        <span
+                          style="font-weight:800;font-family:var(--font-display);color:var(--ink-2);padding:2px 6px;border-radius:6px;transition:background .4s"
+                          [style.background]="
+                            flash().has(other() + '|' + r.standNr + '|' + c) ? '#FFE3DC' : 'transparent'
+                          "
+                          >{{ val(r.standNr, c, other()) }}</span
+                        >
                       }
                     </div>
                     <div style="margin-top:14px">
@@ -289,6 +293,8 @@ export class ReconcileComponent {
   protected readonly metas = signal<Record<string, { note: string; review: string }>>({});
   protected readonly otherReviews = signal<Record<string, string>>({});
   protected readonly discussed = signal<ReadonlySet<string>>(new Set());
+  protected readonly flash = signal<ReadonlySet<string>>(new Set());
+  private flashTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly dirty = new Set<string>();
   private metaTimer: ReturnType<typeof setTimeout> | null = null;
   private valueMap = new Map<string, number>();
@@ -377,6 +383,7 @@ export class ReconcileComponent {
     ]);
     const standsA = new Set(scoresA.map((s) => s.standNr));
     const standsB = new Set(scoresB.map((s) => s.standNr));
+    const prev = this.valueMap;
     this.valueMap = new Map<string, number>();
     for (const s of [
       ...scoresA.map((s) => ["A", s] as const),
@@ -384,6 +391,22 @@ export class ReconcileComponent {
     ]) {
       this.valueMap.set(`${s[0]}|${s[1].standNr}|${s[1].criterion}`, s[1].value);
     }
+    // Flash the other juror's values that changed since the last load (live edits).
+    if (prev.size) {
+      const changed = new Set<string>();
+      const them = this.other();
+      for (const [key, value] of this.valueMap) {
+        if (key.startsWith(`${them}|`) && prev.has(key) && prev.get(key) !== value) {
+          changed.add(key);
+        }
+      }
+      if (changed.size) {
+        this.flash.set(changed);
+        if (this.flashTimer) clearTimeout(this.flashTimer);
+        this.flashTimer = setTimeout(() => this.flash.set(new Set()), 1500);
+      }
+    }
+
     const pts = (scores: Score[], standNr: string): number =>
       scores
         .filter((s) => s.standNr === standNr && s.rankPos !== null)
@@ -455,6 +478,7 @@ export class ReconcileComponent {
     if (cur === 0) return;
     const next = Math.min(5, Math.max(1, cur + delta));
     if (next === cur) return;
+    navigator.vibrate?.(15);
     await this.store.updateScoreValue(criterion, standNr, next as ScoreValue);
     // Re-sort the ranking so the disagreement list reflects the new score.
     const others = (await this.store.placedFor(criterion)).filter((p) => p.standNr !== standNr);
