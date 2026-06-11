@@ -4,7 +4,7 @@ import { rawTotalFor } from "./fairness";
 import { detectAllDrift, detectDriftForCriterion } from "./fairness";
 import { computeDriftSeverity, driftList } from "./fairness";
 import { commonStandNrs, ranksWithinSet } from "./fairness";
-import { computeFinalRanking } from "./fairness";
+import { breakTie, competitionPositions, computeFinalRanking } from "./fairness";
 
 function scores(
   judge: JudgeSlot,
@@ -187,6 +187,70 @@ describe("computeFinalRanking", () => {
     const { ranked } = computeFinalRanking(a, b);
     expect(ranked[0].overall).toBe(ranked[1].overall);
     expect(ranked[0].standNr).toBe("hi");
+  });
+});
+
+describe("competitionPositions", () => {
+  it("gives tied rows the same position and skips the next (1, 2, 2, 4)", () => {
+    const row = (standNr: string, overall: number) => ({
+      standNr,
+      overall,
+      rawTotal: 0,
+      mergedByCriterion: { innovativiteit: 0, relevantie: 0, haalbaarheid: 0, impact: 0 },
+    });
+    expect(competitionPositions([row("a", 4), row("b", 6), row("c", 6), row("d", 9)])).toEqual([
+      1, 2, 2, 4,
+    ]);
+  });
+});
+
+describe("breakTie", () => {
+  // Both judges agree everywhere → s1 wins innov+relev, s2 wins haalb+impact
+  // would draw; tweak so s1 takes three criteria.
+  it("resolves on criterium-zeges first", () => {
+    const a = scores("A", [
+      { s: "s1", v: v(5, 5, 5, 2), r: r(1, 1, 1, 2) },
+      { s: "s2", v: v(2, 2, 2, 5), r: r(2, 2, 2, 1) },
+    ]);
+    const b = scores("B", [
+      { s: "s1", v: v(5, 5, 5, 2), r: r(1, 1, 1, 2) },
+      { s: "s2", v: v(2, 2, 2, 5), r: r(2, 2, 2, 1) },
+    ]);
+    const { ranked } = computeFinalRanking(a, b);
+    const result = breakTie(ranked[0], ranked[1], a, b);
+    expect(result).toEqual({ winner: "s1", rule: "criteria", tally: [3, 1] });
+  });
+
+  it("falls back to totaalpunten when criterium-zeges draw", () => {
+    // 2–2 on criteria, but s1 has higher raw scores.
+    const a = scores("A", [
+      { s: "s1", v: v(5, 5, 3, 3), r: r(1, 1, 2, 2) },
+      { s: "s2", v: v(2, 2, 4, 4), r: r(2, 2, 1, 1) },
+    ]);
+    const b = scores("B", [
+      { s: "s1", v: v(5, 5, 3, 3), r: r(1, 1, 2, 2) },
+      { s: "s2", v: v(2, 2, 4, 4), r: r(2, 2, 1, 1) },
+    ]);
+    const { ranked } = computeFinalRanking(a, b);
+    const result = breakTie(ranked[0], ranked[1], a, b);
+    expect(result.rule).toBe("punten");
+    expect(result.winner).toBe("s1");
+    expect(result.tally).toEqual([32, 24]);
+  });
+
+  it("returns null winner when every rule draws (jury decides)", () => {
+    // Perfect mirror: 2–2 criteria, equal points, equal first places.
+    const a = scores("A", [
+      { s: "s1", v: v(5, 5, 2, 2), r: r(1, 1, 2, 2) },
+      { s: "s2", v: v(2, 2, 5, 5), r: r(2, 2, 1, 1) },
+    ]);
+    const b = scores("B", [
+      { s: "s1", v: v(5, 5, 2, 2), r: r(1, 1, 2, 2) },
+      { s: "s2", v: v(2, 2, 5, 5), r: r(2, 2, 1, 1) },
+    ]);
+    const { ranked } = computeFinalRanking(a, b);
+    const result = breakTie(ranked[0], ranked[1], a, b);
+    expect(result).toEqual({ winner: null, rule: null, tally: null });
   });
 });
 

@@ -1,5 +1,5 @@
 import { CRITERIA, type Score } from "./model";
-import { type FinalRow, commonStandNrs, ranksWithinSet } from "./fairness";
+import { type FinalRow, commonStandNrs, competitionPositions, ranksWithinSet } from "./fairness";
 
 /** Per deelnemer, summed absolute gap between the two judges' per-criterion ranks. */
 export function computeDisagreements(scoresA: Score[], scoresB: Score[]): Map<string, number> {
@@ -25,6 +25,9 @@ export function computeDisagreements(scoresA: Score[], scoresB: Score[]): Map<st
 }
 export function toCsv(ranked: FinalRow[]): string {
   const header = "positie,standNr,overall,rawTotal";
-  const lines = ranked.map((row, i) => `${i + 1},${row.standNr},${row.overall},${row.rawTotal}`);
+  const positions = competitionPositions(ranked);
+  const lines = ranked.map(
+    (row, i) => `${positions[i]},${row.standNr},${row.overall},${row.rawTotal}`,
+  );
   return [header, ...lines].join("\n");
 }

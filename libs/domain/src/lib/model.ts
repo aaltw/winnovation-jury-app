@@ -2,6 +2,13 @@ export const CRITERIA = ["innovativiteit", "relevantie", "haalbaarheid", "impact
 export type Criterion = (typeof CRITERIA)[number];
 
 export type JudgeSlot = "A" | "B";
+
+/**
+ * Pseudo-standNr for the jury's manual #1 tie-break decision. Stored as a
+ * captureMeta row (keyword = winning standNr) so it rides the existing sync
+ * pipeline; never appears in lists because those are driven by deelnemers.
+ */
+export const TIEBREAK_STAND = "__tiebreak";
 export type ScoreValue = 1 | 2 | 3 | 4 | 5;
 
 /** Renamed from "Event" to avoid clashing with the DOM `Event` type. */

@@ -165,3 +165,63 @@ export function computeFinalRanking(scoresA: Score[], scoresB: Score[]): FinalRa
   );
   return { ranked: rows, incomplete };
 }
+
+/** Competition positions (1, 2, 2, 4) over `overall` — ties share a position. */
+export function competitionPositions(ranked: FinalRow[]): number[] {
+  const positions: number[] = [];
+  for (let i = 0; i < ranked.length; i++) {
+    positions[i] = i > 0 && ranked[i].overall === ranked[i - 1].overall ? positions[i - 1] : i + 1;
+  }
+  return positions;
+}
+
+export type TieBreakRule = "criteria" | "punten" | "eerstePlaatsen";
+export interface TieBreak {
+  /** standNr of the winner, or null when every rule draws (jury decides). */
+  winner: string | null;
+  rule: TieBreakRule | null;
+  /** [winner, loser] tallies for the deciding rule (display: "2–1"). */
+  tally: [number, number] | null;
+}
+
+/**
+ * Deterministic tie-break between two rows with equal `overall`:
+ * criterium-zeges (head-to-head merged rank per criterion) → totaalpunten →
+ * aantal eerste plaatsen across both judges' per-criterion rankings.
+ */
+export function breakTie(a: FinalRow, b: FinalRow, scoresA: Score[], scoresB: Score[]): TieBreak {
+  let aWins = 0;
+  let bWins = 0;
+  for (const c of CRITERIA) {
+    if (a.mergedByCriterion[c] < b.mergedByCriterion[c]) aWins++;
+    else if (b.mergedByCriterion[c] < a.mergedByCriterion[c]) bWins++;
+  }
+  if (aWins !== bWins) {
+    return aWins > bWins
+      ? { winner: a.standNr, rule: "criteria", tally: [aWins, bWins] }
+      : { winner: b.standNr, rule: "criteria", tally: [bWins, aWins] };
+  }
+  if (a.rawTotal !== b.rawTotal) {
+    return a.rawTotal > b.rawTotal
+      ? { winner: a.standNr, rule: "punten", tally: [a.rawTotal, b.rawTotal] }
+      : { winner: b.standNr, rule: "punten", tally: [b.rawTotal, a.rawTotal] };
+  }
+  const common = commonStandNrs(scoresA, scoresB);
+  const firsts = new Map<string, number>();
+  for (const c of CRITERIA) {
+    for (const scores of [scoresA, scoresB]) {
+      const ranks = ranksWithinSet(forCriterion(scores, c), common);
+      for (const [standNr, rank] of ranks) {
+        if (rank === 1) firsts.set(standNr, (firsts.get(standNr) ?? 0) + 1);
+      }
+    }
+  }
+  const aFirsts = firsts.get(a.standNr) ?? 0;
+  const bFirsts = firsts.get(b.standNr) ?? 0;
+  if (aFirsts !== bFirsts) {
+    return aFirsts > bFirsts
+      ? { winner: a.standNr, rule: "eerstePlaatsen", tally: [aFirsts, bFirsts] }
+      : { winner: b.standNr, rule: "eerstePlaatsen", tally: [bFirsts, aFirsts] };
+  }
+  return { winner: null, rule: null, tally: null };
+}

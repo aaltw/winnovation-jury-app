@@ -7,6 +7,8 @@ import {
   type Criterion,
   type FinalRow,
   type JudgeSlot,
+  breakTie,
+  competitionPositions,
   toCsv,
 } from "@winnovation/domain";
 import {
@@ -80,6 +82,13 @@ interface IncompleteRow {
                 <wn-icon name="trophy" [size]="14" />
                 {{ w.tied ? "GEDEELDE WINNAAR" : "WINNAAR" }}
               </div>
+              @if (tieReason(); as reason) {
+                <div
+                  style="position:relative;margin-top:10px;font-size:12px;color:rgba(255,255,255,.65);line-height:1.45"
+                >
+                  {{ reason }}
+                </div>
+              }
               <div style="display:flex;align-items:center;gap:13px;margin-top:16px;position:relative">
                 <wn-photo
                   [keyword]="w.keyword"
@@ -124,6 +133,35 @@ interface IncompleteRow {
                 <ng-container *ngTemplateOutlet="notesPanel; context: { standNr: w.standNr }" />
               </div>
             }
+          }
+
+          @if (tieOptions().length) {
+            <div
+              style="border:1.5px solid var(--amber);border-radius:14px;padding:14px;background:var(--amber-soft);margin-bottom:14px"
+            >
+              <div style="font-weight:800;font-size:14px;color:var(--amber-ink)">
+                Gelijkspel op de eerste plaats
+              </div>
+              <div style="font-size:12.5px;color:var(--amber-ink);line-height:1.5;margin:4px 0 10px">
+                Geen rekenregel geeft de doorslag — bespreek het samen en kies de winnaar. De keuze
+                verschijnt op beide telefoons.
+              </div>
+              <div style="display:grid;gap:8px">
+                @for (t of tieOptions(); track t.standNr) {
+                  <button
+                    type="button"
+                    (click)="decide(t.standNr)"
+                    style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:11px;border:1px solid var(--line-2);background:#fff;cursor:pointer;text-align:left;font-weight:700;font-size:14px"
+                  >
+                    <wn-icon name="trophy" [size]="16" [style.color]="'var(--amber-ink)'" />
+                    {{ t.keyword || fmt(t.standNr) }}
+                    <span style="font-weight:500;font-size:12px;color:var(--muted)">{{
+                      t.projectgroep
+                    }}</span>
+                  </button>
+                }
+              </div>
+            </div>
           }
 
           @if (critWinners().length) {
@@ -176,7 +214,7 @@ interface IncompleteRow {
                       >{{ r.pos }}</span
                     >
                     @if (r.tied) {
-                      <span style="display:block;font-size:8.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.02em"
+                      <span style="display:block;font-size:8.5px;font-weight:800;color:var(--amber-ink);text-transform:uppercase;letter-spacing:.02em"
                         >gedeeld</span
                       >
                     }
@@ -315,6 +353,10 @@ export class ResultComponent {
   protected readonly winner = signal<Winner | null>(null);
   protected readonly rest = signal<RankRow[]>([]);
   protected readonly critWinners = signal<CritWinner[]>([]);
+  protected readonly tieReason = signal<string | null>(null);
+  protected readonly tieOptions = signal<
+    { standNr: string; keyword: string; projectgroep: string }[]
+  >([]);
   protected readonly incomplete = signal<IncompleteRow[]>([]);
   protected readonly expanded = signal<string | null>(null);
   protected readonly storyCopied = signal(false);
@@ -381,18 +423,70 @@ export class ResultComponent {
       (valueMap.get(`B|${standNr}|${criterion}`) ?? 0);
 
     const { ranked, incomplete } = await this.store.finalRanking();
-    this.ranked = ranked;
 
-    // Competition ranking on `overall` (1, 2, 2, 4) so ties are visible.
-    const positions = ranked.map((r, i, arr) =>
-      i > 0 && r.overall === arr[i - 1].overall ? 0 : i + 1,
-    );
-    for (let i = 1; i < positions.length; i++) {
-      if (positions[i] === 0) positions[i] = positions[i - 1];
+    // A tie on the #1 spot is resolved by the cascade in `breakTie`
+    // (criterium-zeges → totaalpunten → eerste plaatsen); when every rule
+    // draws, the jury chooses manually and that choice syncs to both phones.
+    const name = (standNr: string): string => keywords.get(standNr) || fmtStand(standNr);
+    const topTied = ranked.filter((r) => r.overall === ranked[0]?.overall);
+    let order = ranked;
+    let reason: string | null = null;
+    let resolved = false;
+    let options: FinalRow[] = [];
+    if (topTied.length > 1) {
+      const decision = await this.store.tieDecision();
+      const winnerFirst = (standNr: string): FinalRow[] => [
+        ...ranked.filter((r) => r.standNr === standNr),
+        ...ranked.filter((r) => r.standNr !== standNr),
+      ];
+      if (decision && topTied.some((t) => t.standNr === decision)) {
+        order = winnerFirst(decision);
+        reason = "Gelijkspel — winnaar samen gekozen door de jury";
+        resolved = true;
+      } else if (topTied.length === 2) {
+        const tb = breakTie(topTied[0], topTied[1], scoresA, scoresB);
+        if (tb.winner && tb.tally) {
+          order = winnerFirst(tb.winner);
+          const loser = topTied.find((t) => t.standNr !== tb.winner) as FinalRow;
+          const rule = {
+            criteria: "criterium-zeges",
+            punten: "totaalpunten",
+            eerstePlaatsen: "eerste plaatsen",
+          }[tb.rule as "criteria" | "punten" | "eerstePlaatsen"];
+          reason = `Wint het gelijkspel met ${name(loser.standNr)} op ${rule} (${tb.tally[0]}–${tb.tally[1]})`;
+          resolved = true;
+        } else {
+          options = topTied;
+        }
+      } else {
+        options = topTied;
+      }
     }
-    const isTied = (i: number): boolean =>
-      (i > 0 && ranked[i].overall === ranked[i - 1].overall) ||
-      (i < ranked.length - 1 && ranked[i].overall === ranked[i + 1].overall);
+    this.ranked = order;
+    this.tieReason.set(reason);
+    this.tieOptions.set(
+      options.map((r) => ({
+        standNr: r.standNr,
+        keyword: keywords.get(r.standNr) ?? "",
+        projectgroep: byStand.get(r.standNr)?.projectgroep ?? "",
+      })),
+    );
+
+    // Competition ranking (1, 2, 2, 4); when the #1 tie is resolved the
+    // winner takes 1 alone and the other tied projects share 2.
+    const positions = competitionPositions(order);
+    const tiedFlags = order.map(
+      (r, i) =>
+        (i > 0 && r.overall === order[i - 1].overall) ||
+        (i < order.length - 1 && r.overall === order[i + 1].overall),
+    );
+    if (resolved) {
+      tiedFlags[0] = false;
+      for (let i = 1; i < topTied.length; i++) {
+        positions[i] = 2;
+        tiedFlags[i] = topTied.length > 2;
+      }
+    }
 
     const row = (r: FinalRow, i: number): RankRow => ({
       standNr: r.standNr,
@@ -400,18 +494,18 @@ export class ResultComponent {
       projectgroep: byStand.get(r.standNr)?.projectgroep ?? "",
       rawTotal: r.rawTotal,
       pos: positions[i],
-      tied: isTied(i),
+      tied: tiedFlags[i],
     });
 
-    if (ranked.length) {
+    if (order.length) {
       this.winner.set({
-        ...row(ranked[0], 0),
+        ...row(order[0], 0),
         perCriterion: CRITERIA.map((c) => ({
           criterion: c,
-          total: combined(ranked[0].standNr, c),
+          total: combined(order[0].standNr, c),
         })),
       });
-      this.rest.set(ranked.slice(1).map((r, i) => row(r, i + 1)));
+      this.rest.set(order.slice(1).map((r, i) => row(r, i + 1)));
       this.critWinners.set(
         CRITERIA.map((c) => {
           const best = ranked.reduce((a, b) =>
@@ -440,6 +534,11 @@ export class ResultComponent {
     this.expanded.set(this.expanded() === standNr ? null : standNr);
   }
 
+  protected async decide(standNr: string): Promise<void> {
+    await this.store.decideTie(standNr);
+    await this.load();
+  }
+
   protected metaOf(standNr: string, judge: JudgeSlot): CaptureMeta | undefined {
     return this.metas()[standNr]?.[judge];
   }
@@ -452,10 +551,10 @@ export class ResultComponent {
   private buildStoryPrompt(): string {
     const w = this.winner();
     const lines: string[] = [];
-    const all = w ? [{ ...w, pos: 1 }, ...this.rest().map((r, i) => ({ ...r, pos: i + 2 }))] : [];
+    const all = w ? [w, ...this.rest()] : [];
     for (const r of all) {
       lines.push(
-        `\n## ${r.pos}. ${r.keyword || fmtStand(r.standNr)} (${r.projectgroep}, ${fmtStand(r.standNr)}) — ${r.rawTotal} punten`,
+        `\n## ${r.pos}.${r.tied ? " (gedeeld)" : ""} ${r.keyword || fmtStand(r.standNr)} (${r.projectgroep}, ${fmtStand(r.standNr)}) — ${r.rawTotal} punten`,
       );
       for (const judge of this.judges) {
         const m = this.metaOf(r.standNr, judge);
@@ -474,6 +573,16 @@ export class ResultComponent {
       "Maak het spannend: bouw op naar de winnaar, die je pas aan het einde onthult.",
       "Noem elk project met iets oprecht positiefs en verwerk de observaties van de juryleden op een natuurlijke manier — citeer cijfers niet letterlijk.",
       "Sluit af met een felicitatie aan de winnaar en een compliment aan alle teams.",
+      ...(this.tieReason()
+        ? [
+            `Bijzonderheid: de eerste plaats was een gelijkspel. ${this.tieReason()}. Benoem dit als spannend detail.`,
+          ]
+        : []),
+      ...(all.some((r) => r.tied)
+        ? [
+            "Posities gemarkeerd met (gedeeld) zijn gedeelde plaatsen — behandel ze als gelijkwaardig.",
+          ]
+        : []),
       "\n# Jurydata (gesorteerd op eindklassement, 1 = winnaar)",
       ...lines,
     ].join("\n");
