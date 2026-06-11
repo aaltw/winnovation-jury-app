@@ -27,6 +27,7 @@ import {
   renumber,
   type Score,
   type ScoreValue,
+  TIEBREAK_STAND,
 } from "@winnovation/domain";
 
 export interface CaptureInput {
@@ -341,6 +342,34 @@ export class JuryStore {
     const existing = await this.metaFor(standNr);
     if (!existing) return;
     await this.service.saveCaptureMeta({ ...existing, ...patch, updatedAt: this.clock() });
+    this.pushSoon();
+  }
+
+  /** The jury's manual #1 tie-break choice (standNr), latest writer wins across judges. */
+  async tieDecision(): Promise<string | null> {
+    const metas = await Promise.all([
+      this.metaFor(TIEBREAK_STAND, "A"),
+      this.metaFor(TIEBREAK_STAND, "B"),
+    ]);
+    const latest = metas
+      .filter((m): m is CaptureMeta => !!m?.keyword)
+      .sort((x, y) => (y.updatedAt ?? 0) - (x.updatedAt ?? 0))[0];
+    return latest?.keyword ?? null;
+  }
+
+  async decideTie(standNr: string): Promise<void> {
+    const event = this.event();
+    if (!event) return;
+    await this.service.saveCaptureMeta({
+      eventId: event.id,
+      judge: this.judge(),
+      standNr: TIEBREAK_STAND,
+      keyword: standNr,
+      note: "",
+      review: "",
+      photoRef: null,
+      updatedAt: this.clock(),
+    });
     this.pushSoon();
   }
 
