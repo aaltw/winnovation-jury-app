@@ -24,7 +24,10 @@ const STEPS: ReadonlyArray<readonly [string, string, string]> = [
   imports: [FormsModule, IconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div style="background:var(--ink);min-height:100vh;display:flex;flex-direction:column;color:#fff">
+    <div
+      class="wn-join-screen"
+      style="background:var(--ink);display:flex;flex-direction:column;color:#fff"
+    >
       <div style="flex:1;overflow-y:auto;padding:24px 26px 26px">
         <div style="display:flex;align-items:center;gap:10px;margin-top:8px">
           <span
