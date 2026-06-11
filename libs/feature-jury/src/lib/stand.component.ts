@@ -118,7 +118,9 @@ const LABELS: Record<Criterion, string> = {
               >
                 {{ photoRef() ? "Foto vastgelegd" : "Foto maken" }}
               </div>
-              <div style="font-size:12px;color:var(--muted)">optioneel — helpt je herinneren</div>
+              <div style="font-size:12px;color:var(--muted)">
+                optioneel — blijft alleen op dit toestel
+              </div>
             </span>
             @if (photoRef()) {
               <wn-icon name="check" [size]="20" />
